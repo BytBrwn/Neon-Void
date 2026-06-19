@@ -36,12 +36,14 @@ export const SitePage: React.FC = () => {
       <Background />
 
       <header className="site-header">
+        <div className="site-header__glow" aria-hidden="true" />
         <nav className="site-nav" aria-label="Primary">
           <button
             className="site-logo"
             type="button"
             onClick={() => goToPanel("hero")}
           >
+            <span className="site-logo__mark" aria-hidden="true" />
             Catalyx
           </button>
           <ul className="site-nav__links">
@@ -60,6 +62,14 @@ export const SitePage: React.FC = () => {
               </li>
             ))}
           </ul>
+          <div className="site-nav__meta" aria-hidden="true">
+            <span className="status-pill">
+              <span className="status-pill__dot" />
+              Foundry Live
+            </span>
+            <span className="meta-chip">OSDK 2.0</span>
+            <span className="meta-chip meta-chip--dim">144 FPS UI</span>
+          </div>
           <button
             className="site-nav__cta"
             type="button"
@@ -72,10 +82,32 @@ export const SitePage: React.FC = () => {
 
       <main className="site-main">
         <div className="panel-stage">
+          <div className="panel-stage__chrome" aria-hidden="true">
+            <span className="panel-stage__corner panel-stage__corner--tl" />
+            <span className="panel-stage__corner panel-stage__corner--tr" />
+            <span className="panel-stage__corner panel-stage__corner--bl" />
+            <span className="panel-stage__corner panel-stage__corner--br" />
+            <span className="panel-stage__orbit" />
+            <span className="panel-stage__tick panel-stage__tick--left" />
+            <span className="panel-stage__tick panel-stage__tick--right" />
+            <span className="panel-stage__label panel-stage__label--left">
+              PANEL::{activePanel.toUpperCase()}
+            </span>
+            <span className="panel-stage__label panel-stage__label--right">
+              RENDER::GLASS
+            </span>
+          </div>
           <div
             key={activePanel}
             className={`panel-box glass-panel panel-box--${activePanel} panel-box--from-${slideDirection}`}
           >
+            <span className="panel-box__border-glow" aria-hidden="true" />
+            <span className="panel-box__shine" aria-hidden="true" />
+            <span className="panel-box__corner panel-box__corner--tl" aria-hidden="true" />
+            <span className="panel-box__corner panel-box__corner--tr" aria-hidden="true" />
+            <span className="panel-box__corner panel-box__corner--bl" aria-hidden="true" />
+            <span className="panel-box__corner panel-box__corner--br" aria-hidden="true" />
+            <span className="panel-box__scan" aria-hidden="true" />
             {activePanel === "hero" && (
               <div className="hero-block">
                 <div className="hero-block__intro">
@@ -155,6 +187,7 @@ export const SitePage: React.FC = () => {
                   </ul>
                 </div>
                 <div className="about-visual">
+                  <div className="about-visual__orb" aria-hidden="true" />
                   <p className="about-visual__label">Live Preview</p>
                   <h3>One widget. Entire journey.</h3>
                   <div className="about-visual__stats">
