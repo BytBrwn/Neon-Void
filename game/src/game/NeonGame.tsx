@@ -146,7 +146,7 @@ export const NeonGame: React.FC = () => {
   }, [applyHud]);
 
   const togglePause = useCallback(() => { engineRef.current?.togglePause(); syncHud(); }, [syncHud]);
-  const startGame = useCallback(() => { engineRef.current?.start(); syncHud(); }, [syncHud]);
+  const startGame = useCallback(() => { botModeRef.current = false; engineRef.current?.start(); syncHud(); }, [syncHud]);
   const buyShopSupport = useCallback((id: ShopSupportId) => { if (engineRef.current?.buyShopSupport(id)) syncHud(); }, [syncHud]);
   const buyOrEquipBlaster = useCallback((id: BlasterId) => { if (engineRef.current?.buyOrEquipBlaster(id)) syncHud(); }, [syncHud]);
   const buyOrEquipSkin = useCallback((id: ShipSkinId) => { if (engineRef.current?.buyOrEquipSkin(id)) syncHud(); }, [syncHud]);
@@ -154,7 +154,7 @@ export const NeonGame: React.FC = () => {
   const enterSandbox = useCallback(() => { engineRef.current?.enterSandbox(); syncHud(); }, [syncHud]);
   const leaveSandbox = useCallback(() => { engineRef.current?.exitSandbox(); syncHud(); }, [syncHud]);
   const resetSandbox = useCallback(() => { engineRef.current?.resetSandbox(); syncHud(); }, [syncHud]);
-  const exitToMenu = useCallback(() => { engineRef.current?.exitToMenu(); syncHud(); }, [syncHud]);
+  const exitToMenu = useCallback(() => { botModeRef.current = false; engineRef.current?.exitToMenu(); syncHud(); }, [syncHud]);
 
   // Main game loop setup
   useEffect(() => {
@@ -401,8 +401,9 @@ export const NeonGame: React.FC = () => {
             </button>
           )}
           <button className="neon-game__btn neon-game__btn--ai" type="button" onClick={() => {
-            botModeRef.current = true;
             startGame();
+            botModeRef.current = true;
+            syncHud();
           }}>AI Mode</button>
         </div>
       )}
