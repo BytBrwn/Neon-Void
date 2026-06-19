@@ -1,9 +1,15 @@
 import widgetManifestPlugin from "@osdk/widget.vite-plugin";
 import react from "@vitejs/plugin-react";
-import { defineConfig } from "vite";
+import { defineConfig, loadEnv } from "vite";
 
 // https://vitejs.dev/config/
-export default defineConfig({
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, process.cwd(), "");
+  if (env.FOUNDRY_TOKEN != null) {
+    process.env.FOUNDRY_TOKEN = env.FOUNDRY_TOKEN;
+  }
+
+  return {
   plugins: [react(), widgetManifestPlugin()],
   base:
     process.env.NODE_ENV === "development"
@@ -22,4 +28,5 @@ export default defineConfig({
       input: ["./index.html"],
     },
   },
+};
 });
