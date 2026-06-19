@@ -395,7 +395,7 @@ export const NeonGame: React.FC = () => {
             WASD to drift · Start with Pulse Bolt · Unlock blasters in the shop
           </p>
           <button className="neon-game__btn" type="button" onClick={startGame}>Launch</button>
-          <button className="neon-game__btn neon-game__btn--ghost" type="button" onClick={() => {
+          <button className="neon-game__btn neon-game__btn--ai" type="button" onClick={() => {
             botModeRef.current = true;
             startGame();
           }}>AI Mode</button>

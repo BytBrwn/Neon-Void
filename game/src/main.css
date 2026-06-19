@@ -648,6 +648,60 @@ body {
   box-shadow: none;
 }
 
+@keyframes ai-shimmer {
+  0%   { background-position: -200% center; }
+  100% { background-position: 200% center; }
+}
+
+@keyframes ai-border-pulse {
+  0%, 100% { box-shadow: 0 0 18px rgba(120, 80, 255, 0.5), 0 0 6px rgba(0, 220, 255, 0.4) inset; }
+  50%       { box-shadow: 0 0 38px rgba(180, 80, 255, 0.8), 0 0 14px rgba(0, 220, 255, 0.6) inset; }
+}
+
+.neon-game__btn--ai {
+  margin-top: 0;
+  position: relative;
+  overflow: hidden;
+  border-color: rgba(160, 80, 255, 0.7);
+  background: linear-gradient(
+    100deg,
+    rgba(80, 0, 180, 0.55) 0%,
+    rgba(0, 200, 255, 0.35) 35%,
+    rgba(180, 60, 255, 0.55) 55%,
+    rgba(0, 200, 255, 0.35) 75%,
+    rgba(80, 0, 180, 0.55) 100%
+  );
+  background-size: 200% auto;
+  animation:
+    ai-shimmer 3s linear infinite,
+    ai-border-pulse 2s ease-in-out infinite;
+  color: #e8d8ff;
+  letter-spacing: 0.18em;
+}
+
+.neon-game__btn--ai::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    105deg,
+    transparent 30%,
+    rgba(255, 255, 255, 0.18) 50%,
+    transparent 70%
+  );
+  background-size: 200% auto;
+  animation: ai-shimmer 2.2s linear infinite;
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+.neon-game__btn--ai:hover {
+  transform: translateY(-2px) scale(1.04);
+  animation-duration: 1.5s, 1s;
+  color: #fff;
+  border-color: rgba(200, 120, 255, 0.9);
+}
+
 .neon-game__btn--danger {
   margin-top: 0;
   border-color: rgba(255, 70, 110, 0.5);
