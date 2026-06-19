@@ -1,6 +1,10 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import { DebugPanel } from "./DebugPanel.js";
+import { HealthBar } from "./HealthBar.js";
+import { DEBUG_TOOLS_ENABLED } from "./debug.js";
 import { NeonEngine } from "./engine.js";
-import type { GameSnapshot, InputState } from "./types.js";
+import type { GameSnapshot, InputState, ShopItemId, ShipSkinId } from "./types.js";
+import { getShipSkinPreviewUrl } from "./shipSkins.js";
 
 const defaultInput: InputState = {
   keys: new Set<string>(),
@@ -24,7 +28,19 @@ export const NeonGame: React.FC = () => {
     health: 100,
     maxHealth: 100,
     highScore: 0,
+    waveTotal: 0,
+    waveLeft: 0,
+    weaponLabel: "STANDARD",
+    waveBanner: "",
+    credits: 0,
+    shopOffers: [],
+    shopSkins: [],
+    inSandbox: false,
+    roundFrozen: false,
+    sandboxInvincible: true,
   }));
+
+  const [shopTab, setShopTab] = useState<"upgrades" | "skins">("upgrades");
 
   const syncHud = useCallback(() => {
     if (engineRef.current) {
@@ -39,6 +55,45 @@ export const NeonGame: React.FC = () => {
 
   const startGame = useCallback(() => {
     engineRef.current?.start();
+    syncHud();
+  }, [syncHud]);
+
+  const buyShopItem = useCallback((id: ShopItemId) => {
+    const engine = engineRef.current;
+    if (engine?.buyShopItem(id)) {
+      syncHud();
+    }
+  }, [syncHud]);
+
+  const buyOrEquipSkin = useCallback((id: ShipSkinId) => {
+    const engine = engineRef.current;
+    if (engine?.buyOrEquipSkin(id)) {
+      syncHud();
+    }
+  }, [syncHud]);
+
+  const leaveShop = useCallback(() => {
+    engineRef.current?.leaveShop();
+    syncHud();
+  }, [syncHud]);
+
+  const enterSandbox = useCallback(() => {
+    engineRef.current?.enterSandbox();
+    syncHud();
+  }, [syncHud]);
+
+  const leaveSandbox = useCallback(() => {
+    engineRef.current?.exitSandbox();
+    syncHud();
+  }, [syncHud]);
+
+  const resetSandbox = useCallback(() => {
+    engineRef.current?.resetSandbox();
+    syncHud();
+  }, [syncHud]);
+
+  const exitToMenu = useCallback(() => {
+    engineRef.current?.exitToMenu();
     syncHud();
   }, [syncHud]);
 
@@ -99,7 +154,7 @@ export const NeonGame: React.FC = () => {
         event.preventDefault();
         if (event.repeat) return;
         const engine = engineRef.current;
-        if (engine && (engine.phase === "playing" || engine.phase === "paused")) {
+        if (engine && (engine.phase === "playing" || engine.phase === "paused" || engine.phase === "sandbox")) {
           engine.togglePause();
           setHud(engine.snapshot());
         }
@@ -140,20 +195,23 @@ export const NeonGame: React.FC = () => {
   const handleMouseDown = (event: React.MouseEvent<HTMLCanvasElement>): void => {
     syncMouse(event);
     const engine = engineRef.current;
-    if (engine?.phase === "menu") {
-      startGame();
+    if (!engine || engine.phase === "menu" || engine.phase === "dead" || engine.phase === "shop") {
       return;
     }
-    if (engine?.phase === "playing") {
+    if (engine.phase === "playing" || engine.phase === "sandbox") {
       inputRef.current.mouseDown = true;
     }
   };
+
+  const showRunChrome = hud.phase === "playing" || hud.phase === "paused" || hud.phase === "sandbox";
+  const showHealth = showRunChrome;
+  const showHudStats = showRunChrome || hud.phase === "shop";
 
   return (
     <div className="neon-game">
       <canvas
         ref={canvasRef}
-        className="neon-game__canvas"
+        className={`neon-game__canvas${hud.phase === "menu" ? " neon-game__canvas--menu" : ""}`}
         onMouseMove={syncMouse}
         onMouseDown={handleMouseDown}
         onMouseUp={() => {
@@ -164,49 +222,173 @@ export const NeonGame: React.FC = () => {
         }}
       />
 
-      <div className="neon-game__hud">
+      {showHudStats && (
+      <div className="neon-game__hud neon-game__chrome">
+        {hud.inSandbox && hud.waveBanner && (
+          <p className="neon-game__wave-banner neon-game__wave-banner--top" aria-live="polite">
+            {hud.waveBanner}
+          </p>
+        )}
         <div className="neon-game__hud-top">
           <span>SCORE {hud.score.toLocaleString()}</span>
-          <span>WAVE {hud.wave}</span>
+          <span className="neon-game__credits">{hud.credits.toLocaleString()} CR</span>
+          <span>WAVE {hud.wave} · {hud.waveLeft}/{hud.waveTotal || "—"}</span>
+          {hud.roundFrozen && !hud.inSandbox && <span className="neon-game__sandbox-tag">FROZEN</span>}
           <span>COMBO x{hud.combo}</span>
           <span>HI {hud.highScore.toLocaleString()}</span>
-          {(hud.phase === "playing" || hud.phase === "paused") && (
+          {showRunChrome && (
             <button className="neon-game__pause-btn" type="button" onClick={togglePause}>
               {hud.phase === "paused" ? "Resume" : "Pause"}
             </button>
           )}
         </div>
-        <div className="neon-game__health">
-          <div
-            className="neon-game__health-fill"
-            style={{ width: `${(hud.health / hud.maxHealth) * 100}%` }}
-          />
-        </div>
+        {(showRunChrome || hud.phase === "shop") && (
+          <p className="neon-game__weapon">{hud.weaponLabel}</p>
+        )}
       </div>
+      )}
+
+      {showHealth && (
+        <HealthBar health={hud.health} maxHealth={hud.maxHealth} />
+      )}
+
+      {hud.phase === "sandbox" && (
+        <div className="neon-game__sandbox-hud neon-game__chrome">
+          <div className="neon-game__sandbox-bar">
+            <span>Sandbox · no waves · spawn enemies from Test panel</span>
+            <button className="neon-game__pause-btn" type="button" onClick={leaveSandbox}>
+              Exit
+            </button>
+          </div>
+        </div>
+      )}
 
       {hud.phase === "menu" && (
-        <div className="neon-game__overlay">
+        <div className="neon-game__overlay neon-game__overlay--menu">
           <p className="neon-game__eyebrow">Catalyx Arcade</p>
           <h1 className="neon-game__title">NEON VOID</h1>
           <p className="neon-game__subtitle">
-            WASD to drift · Mouse to aim · Hold fire to shred · Esc to pause
+            WASD to drift · Earn credits · Shop every 5 waves · Boss every 10 waves
           </p>
           <button className="neon-game__btn" type="button" onClick={startGame}>
             Launch
+          </button>
+          {DEBUG_TOOLS_ENABLED && (
+            <button className="neon-game__btn neon-game__btn--ghost" type="button" onClick={enterSandbox}>
+              Sandbox
+            </button>
+          )}
+        </div>
+      )}
+
+      {hud.phase === "shop" && (
+        <div className="neon-game__overlay neon-game__overlay--shop">
+          <p className="neon-game__eyebrow">Wave {hud.wave} cleared</p>
+          <h2 className="neon-game__title neon-game__title--sm">VOID SHOP</h2>
+          <p className="neon-game__subtitle neon-game__shop-balance">
+            {hud.credits.toLocaleString()} credits available
+          </p>
+          <div className="neon-game__shop-tabs">
+            <button
+              type="button"
+              className={`neon-game__shop-tab${shopTab === "upgrades" ? " neon-game__shop-tab--active" : ""}`}
+              onClick={() => setShopTab("upgrades")}
+            >
+              Upgrades
+            </button>
+            <button
+              type="button"
+              className={`neon-game__shop-tab${shopTab === "skins" ? " neon-game__shop-tab--active" : ""}`}
+              onClick={() => setShopTab("skins")}
+            >
+              Skins
+            </button>
+          </div>
+          {shopTab === "upgrades" && (
+            <div className="neon-game__shop-grid">
+              {hud.shopOffers.map((offer) => {
+                const disabled = offer.soldOut || hud.credits < offer.cost;
+                return (
+                  <button
+                    key={offer.id}
+                    className={`neon-game__shop-item${disabled ? " neon-game__shop-item--disabled" : ""}`}
+                    type="button"
+                    disabled={disabled}
+                    onClick={() => buyShopItem(offer.id)}
+                  >
+                    <span className="neon-game__shop-item-name">{offer.label}</span>
+                    <span className="neon-game__shop-item-detail">{offer.detail}</span>
+                    <span className="neon-game__shop-item-cost">
+                      {offer.soldOut ? "MAXED" : `${offer.cost} CR`}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+          {shopTab === "skins" && (
+            <div className="neon-game__shop-grid neon-game__shop-grid--skins">
+              {hud.shopSkins.map((skin) => {
+                const disabled = skin.equipped || (!skin.owned && hud.credits < skin.cost);
+                const costLabel = skin.equipped
+                  ? "Equipped"
+                  : skin.owned
+                    ? "Equip"
+                    : skin.cost === 0
+                      ? "Free"
+                      : `${skin.cost} CR`;
+                return (
+                  <button
+                    key={skin.id}
+                    className={`neon-game__shop-item neon-game__shop-item--skin${skin.equipped ? " neon-game__shop-item--equipped" : ""}${disabled ? " neon-game__shop-item--disabled" : ""}`}
+                    type="button"
+                    disabled={disabled}
+                    onClick={() => buyOrEquipSkin(skin.id)}
+                  >
+                    <img
+                      className="neon-game__shop-skin-preview"
+                      src={getShipSkinPreviewUrl(skin.id)}
+                      alt=""
+                      draggable={false}
+                    />
+                    <span className="neon-game__shop-item-name">{skin.label}</span>
+                    <span className="neon-game__shop-item-detail">{skin.detail}</span>
+                    <span className="neon-game__shop-item-cost">{costLabel}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+          <button className="neon-game__btn" type="button" onClick={leaveShop}>
+            Continue
           </button>
         </div>
       )}
 
       {hud.phase === "paused" && (
         <div className="neon-game__overlay neon-game__overlay--pause">
-          <p className="neon-game__eyebrow">Paused</p>
-          <h2 className="neon-game__title neon-game__title--sm">SYSTEM HALTED</h2>
+          <p className="neon-game__eyebrow">{hud.inSandbox ? "Sandbox paused" : "Paused"}</p>
+          <h2 className="neon-game__title neon-game__title--sm">
+            {hud.inSandbox ? "SANDBOX HALTED" : "SYSTEM HALTED"}
+          </h2>
           <p className="neon-game__subtitle">
-            Score {hud.score.toLocaleString()} · Wave {hud.wave} · Combo x{hud.combo}
+            {hud.inSandbox
+              ? "Test freely · Esc to resume"
+              : `Score ${hud.score.toLocaleString()} · Wave ${hud.wave} · Combo x${hud.combo}`}
           </p>
-          <button className="neon-game__btn" type="button" onClick={togglePause}>
-            Resume
-          </button>
+          <div className="neon-game__overlay-actions">
+            <button className="neon-game__btn" type="button" onClick={togglePause}>
+              Resume
+            </button>
+            {hud.inSandbox && (
+              <button className="neon-game__btn neon-game__btn--ghost" type="button" onClick={resetSandbox}>
+                Reset
+              </button>
+            )}
+            <button className="neon-game__btn neon-game__btn--danger" type="button" onClick={exitToMenu}>
+              Exit to Menu
+            </button>
+          </div>
         </div>
       )}
 
@@ -215,7 +397,7 @@ export const NeonGame: React.FC = () => {
           <p className="neon-game__eyebrow">Ship Destroyed</p>
           <h2 className="neon-game__title neon-game__title--sm">VOID CLAIMED YOU</h2>
           <p className="neon-game__subtitle">
-            Score {hud.score.toLocaleString()} · Wave {hud.wave}
+            Score {hud.score.toLocaleString()} · Wave {hud.wave} · {hud.credits.toLocaleString()} CR earned
           </p>
           <button className="neon-game__btn" type="button" onClick={startGame}>
             Respawn
@@ -223,9 +405,13 @@ export const NeonGame: React.FC = () => {
         </div>
       )}
 
-      <p className="neon-game__controls" aria-hidden="true">
+      {showRunChrome && (
+      <p className="neon-game__controls neon-game__chrome" aria-hidden="true">
         MOVE WASD · FIRE MOUSE / SPACE · PAUSE ESC / P
       </p>
+      )}
+
+      <DebugPanel engineRef={engineRef} hud={hud} onChange={syncHud} />
     </div>
   );
 };

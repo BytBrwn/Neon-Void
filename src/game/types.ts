@@ -1,6 +1,15 @@
-export type GamePhase = "menu" | "playing" | "paused" | "dead";
+export type GamePhase = "menu" | "playing" | "paused" | "shop" | "sandbox" | "dead";
 
 export type Vec2 = { x: number; y: number };
+
+export type WeaponStats = {
+  fireRate: number;
+  spread: number;
+  pierce: number;
+  damage: number;
+};
+
+export type ShipSkinId = "interceptor" | "needle" | "bulwark" | "phantom" | "comet";
 
 export type Player = {
   x: number;
@@ -16,6 +25,8 @@ export type Player = {
   fireCooldown: number;
   invuln: number;
   engineGlow: number;
+  weapon: WeaponStats;
+  skin: ShipSkinId;
 };
 
 export type Bullet = {
@@ -28,6 +39,7 @@ export type Bullet = {
   radius: number;
   friendly: boolean;
   pierce: number;
+  damage: number;
 };
 
 export type EnemyKind =
@@ -38,6 +50,9 @@ export type EnemyKind =
   | "splitter"
   | "tank"
   | "phantom"
+  | "stalker"
+  | "bomber"
+  | "sentinel"
   | "boss";
 
 export type Enemy = {
@@ -55,6 +70,18 @@ export type Enemy = {
   timer: number;
   orbitDir: number;
   phase: number;
+};
+
+export type PowerupKind = "rapid" | "spread" | "pierce" | "damage" | "heal" | "mega";
+
+export type Powerup = {
+  x: number;
+  y: number;
+  vy: number;
+  radius: number;
+  kind: PowerupKind;
+  pulse: number;
+  life: number;
 };
 
 export type Particle = {
@@ -76,6 +103,36 @@ export type Star = {
   twinkle: number;
 };
 
+export type ShootingStar = {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  life: number;
+  maxLife: number;
+  length: number;
+  hue: number;
+};
+
+export type ShopSkinOffer = {
+  id: ShipSkinId;
+  label: string;
+  detail: string;
+  cost: number;
+  owned: boolean;
+  equipped: boolean;
+};
+
+export type ShopItemId = "rapid" | "spread" | "pierce" | "damage" | "repair" | "maxHealth" | "mega";
+
+export type ShopOffer = {
+  id: ShopItemId;
+  label: string;
+  detail: string;
+  cost: number;
+  soldOut: boolean;
+};
+
 export type InputState = {
   keys: Set<string>;
   mouseX: number;
@@ -91,4 +148,14 @@ export type GameSnapshot = {
   health: number;
   maxHealth: number;
   highScore: number;
+  waveTotal: number;
+  waveLeft: number;
+  weaponLabel: string;
+  waveBanner: string;
+  credits: number;
+  shopOffers: ShopOffer[];
+  shopSkins: ShopSkinOffer[];
+  inSandbox: boolean;
+  roundFrozen: boolean;
+  sandboxInvincible: boolean;
 };

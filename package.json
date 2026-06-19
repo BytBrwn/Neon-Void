@@ -10,7 +10,8 @@
     "dev:remote": "vite --mode code-workspaces",
     "lint": "eslint . --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview",
-    "test": "vitest run --passWithNoTests"
+    "test": "vitest run --passWithNoTests",
+    "game:console": "node scripts/game-console.mjs"
   },
   "dependencies": {
     "@custom-widget/sdk": "latest",

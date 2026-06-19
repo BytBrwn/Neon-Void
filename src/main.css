@@ -32,6 +32,17 @@ body {
   height: 100%;
   cursor: crosshair;
   touch-action: none;
+  position: relative;
+  z-index: 0;
+}
+
+.neon-game__canvas--menu {
+  cursor: default;
+}
+
+.neon-game__chrome {
+  position: relative;
+  z-index: 10;
 }
 
 .neon-game__hud {
@@ -77,26 +88,151 @@ body {
   border-color: rgba(0, 255, 220, 0.35);
 }
 
-.neon-game__health {
-  margin-top: 0.65rem;
-  width: min(100%, 320px);
-  height: 6px;
+.neon-game__credits {
+  color: rgba(255, 210, 100, 0.95);
+  text-shadow: 0 0 10px rgba(255, 180, 60, 0.4);
+}
+
+.neon-game__health-dock {
+  position: absolute;
+  top: 5.15rem;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(420px, 90vw);
+  z-index: 10;
+  pointer-events: none;
+}
+
+.neon-game__sandbox-hud {
+  position: absolute;
+  top: 7.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.55rem;
+  z-index: 10;
+  pointer-events: none;
+}
+
+.neon-game__wave-banner {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(180, 255, 240, 0.65);
+  text-shadow: 0 0 16px rgba(0, 255, 220, 0.45);
+  animation: neon-wave-banner-pulse 1.57s ease-in-out infinite;
+}
+
+.neon-game__wave-banner--top {
+  width: 100%;
+  margin-bottom: 0.35rem;
+  text-align: center;
+}
+
+@keyframes neon-wave-banner-pulse {
+  0%,
+  100% {
+    opacity: 0.4;
+  }
+
+  50% {
+    opacity: 0.7;
+  }
+}
+
+.neon-game__sandbox-bar {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.4rem 0.85rem;
+  border: 1px dashed rgba(255, 180, 80, 0.35);
+  border-radius: 999px;
+  background: rgba(8, 4, 16, 0.72);
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(255, 210, 140, 0.9);
+  pointer-events: auto;
+}
+
+.neon-game__health-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.75rem;
+  margin-bottom: 0.35rem;
+  padding: 0 0.15rem;
+}
+
+.neon-game__health-label {
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: rgba(180, 255, 220, 0.72);
+}
+
+.neon-game__health-value {
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: rgba(200, 255, 230, 0.88);
+}
+
+.neon-game__health-track {
+  position: relative;
+  height: 10px;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.08);
-  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  overflow: visible;
 }
 
 .neon-game__health-fill {
+  position: relative;
+  z-index: 1;
   height: 100%;
   border-radius: inherit;
-  background: linear-gradient(90deg, #00ffdc, #7b5cff);
-  box-shadow: 0 0 12px rgba(0, 255, 220, 0.45);
-  transition: width 0.15s ease;
+  transition: none;
+}
+
+.neon-game__health-fill--ghost {
+  position: absolute;
+  inset: 0 auto 0 0;
+  z-index: 0;
+  background: linear-gradient(90deg, rgba(0, 255, 220, 0.35), rgba(120, 80, 255, 0.25)) !important;
+  box-shadow: none !important;
+  filter: blur(2px);
+}
+
+.neon-game__health-fragment {
+  position: absolute;
+  z-index: 2;
+  border-radius: 1px;
+  pointer-events: none;
+  will-change: transform, opacity, left, top;
+}
+
+.neon-game__weapon {
+  margin: 0.45rem 0 0;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(255, 200, 120, 0.85);
+  text-shadow: 0 0 10px rgba(255, 180, 80, 0.35);
 }
 
 .neon-game__overlay {
   position: absolute;
   inset: 0;
+  z-index: 30;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -104,8 +240,13 @@ body {
   gap: 0.85rem;
   padding: 2rem;
   text-align: center;
+  pointer-events: auto;
   background: radial-gradient(circle at center, rgba(3, 0, 20, 0.55), rgba(3, 0, 20, 0.82));
   backdrop-filter: blur(4px);
+}
+
+.neon-game__overlay--menu {
+  z-index: 40;
 }
 
 .neon-game__overlay--dead {
@@ -114,7 +255,124 @@ body {
 
 .neon-game__overlay--pause {
   background: radial-gradient(circle at center, rgba(0, 30, 40, 0.45), rgba(3, 0, 20, 0.75));
-  pointer-events: auto;
+}
+
+.neon-game__overlay--shop {
+  background: radial-gradient(circle at center, rgba(30, 20, 0, 0.5), rgba(3, 0, 20, 0.88));
+  gap: 1rem;
+}
+
+.neon-game__shop-balance {
+  color: rgba(255, 210, 100, 0.9);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.neon-game__shop-tabs {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: center;
+}
+
+.neon-game__shop-tab {
+  padding: 0.4rem 1rem;
+  border: 1px solid rgba(255, 200, 80, 0.25);
+  border-radius: 999px;
+  background: rgba(255, 200, 80, 0.05);
+  color: rgba(238, 242, 255, 0.75);
+  font: inherit;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.neon-game__shop-tab--active {
+  border-color: rgba(255, 200, 80, 0.55);
+  background: rgba(255, 200, 80, 0.16);
+  color: rgba(255, 230, 180, 0.95);
+}
+
+.neon-game__shop-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0.65rem;
+  width: min(100%, 720px);
+  max-height: min(50vh, 360px);
+  overflow-y: auto;
+  padding: 0.25rem;
+}
+
+.neon-game__shop-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.25rem;
+  padding: 0.75rem 0.85rem;
+  border: 1px solid rgba(255, 200, 80, 0.25);
+  border-radius: 12px;
+  background: rgba(255, 200, 80, 0.06);
+  color: #eef2ff;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.2s ease, background 0.2s ease, transform 0.2s ease;
+}
+
+.neon-game__shop-item:hover:not(:disabled) {
+  border-color: rgba(255, 200, 80, 0.55);
+  background: rgba(255, 200, 80, 0.12);
+  transform: translateY(-1px);
+}
+
+.neon-game__shop-item--disabled,
+.neon-game__shop-item:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.neon-game__shop-item-name {
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.neon-game__shop-item-detail {
+  font-size: 0.68rem;
+  color: rgba(238, 242, 255, 0.65);
+  line-height: 1.35;
+}
+
+.neon-game__shop-item-cost {
+  margin-top: 0.15rem;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: rgba(255, 210, 100, 0.95);
+}
+
+.neon-game__shop-grid--skins {
+  grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
+}
+
+.neon-game__shop-item--skin {
+  align-items: center;
+  text-align: center;
+}
+
+.neon-game__shop-item--equipped {
+  border-color: rgba(0, 255, 220, 0.45);
+  background: rgba(0, 255, 220, 0.08);
+}
+
+.neon-game__shop-skin-preview {
+  width: 56px;
+  height: 56px;
+  margin-bottom: 0.15rem;
+  image-rendering: auto;
+  filter: drop-shadow(0 0 8px rgba(0, 255, 220, 0.25));
 }
 
 .neon-game__eyebrow {
@@ -200,9 +458,12 @@ body {
     padding: 0 0.5rem;
   }
 
-  .neon-game__health {
-    height: 8px;
-    width: 380px;
+  .neon-game__health-dock {
+    width: 480px;
+  }
+
+  .neon-game__health-track {
+    height: 12px;
   }
 
   .neon-game__controls {
@@ -214,4 +475,127 @@ body {
   .neon-game__title {
     animation: none;
   }
+
+  .neon-game__wave-banner {
+    animation: none;
+    opacity: 0.65;
+  }
+}
+
+.neon-debug {
+  position: absolute;
+  right: 0.75rem;
+  bottom: 2.35rem;
+  z-index: 50;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.45rem;
+  pointer-events: none;
+}
+
+.neon-debug__toggle {
+  pointer-events: auto;
+  padding: 0.3rem 0.6rem;
+  border: 1px dashed rgba(255, 180, 80, 0.45);
+  border-radius: 999px;
+  background: rgba(20, 10, 0, 0.72);
+  color: rgba(255, 210, 120, 0.9);
+  font: inherit;
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.neon-debug__panel {
+  pointer-events: auto;
+  width: min(92vw, 210px);
+  padding: 0.55rem;
+  border: 1px dashed rgba(255, 180, 80, 0.35);
+  border-radius: 10px;
+  background: rgba(8, 4, 16, 0.92);
+  backdrop-filter: blur(6px);
+}
+
+.neon-debug__label {
+  margin: 0 0 0.4rem;
+  font-size: 0.55rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(255, 180, 80, 0.75);
+}
+
+.neon-debug__actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.35rem;
+}
+
+.neon-debug__actions button {
+  padding: 0.35rem 0.4rem;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(238, 242, 255, 0.82);
+  font: inherit;
+  font-size: 0.56rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+}
+
+.neon-debug__actions button:hover {
+  border-color: rgba(255, 180, 80, 0.45);
+  background: rgba(255, 180, 80, 0.1);
+}
+
+.neon-debug__actions button:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.neon-debug__btn--active {
+  border-color: rgba(255, 180, 80, 0.65) !important;
+  background: rgba(255, 180, 80, 0.18) !important;
+  color: rgba(255, 230, 180, 0.95) !important;
+}
+
+.neon-game__sandbox-tag {
+  color: rgba(255, 180, 80, 0.95);
+  text-shadow: 0 0 10px rgba(255, 160, 60, 0.35);
+}
+
+.neon-game__btn--ghost {
+  margin-top: 0;
+  border-color: rgba(255, 180, 80, 0.35);
+  background: rgba(255, 180, 80, 0.08);
+  box-shadow: none;
+}
+
+.neon-game__btn--danger {
+  margin-top: 0;
+  border-color: rgba(255, 70, 110, 0.5);
+  background: linear-gradient(135deg, rgba(255, 60, 100, 0.22), rgba(180, 30, 80, 0.35));
+  box-shadow: 0 0 30px rgba(255, 60, 100, 0.22);
+}
+
+.neon-game__btn--danger:hover {
+  box-shadow: 0 0 40px rgba(255, 60, 100, 0.4);
+}
+
+.neon-game__overlay-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.65rem;
+  margin-top: 0.25rem;
+}
+
+.neon-game__overlay-actions .neon-game__btn {
+  margin-top: 0;
+  min-width: 12rem;
 }
