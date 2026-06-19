@@ -1246,7 +1246,8 @@ export class NeonEngine {
     ctx.fillStyle = `rgba(180, 255, 240, ${alpha})`;
     ctx.shadowColor = "rgba(0, 255, 220, 0.45)";
     ctx.shadowBlur = 16;
-    ctx.fillText(this.waveBanner, this.width * 0.5, this.height * 0.16);
+    const bannerY = this.width <= 768 ? 100 : this.height * 0.16;
+    ctx.fillText(this.waveBanner, this.width * 0.5, bannerY);
     ctx.restore();
   }
 

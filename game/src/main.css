@@ -503,6 +503,46 @@ body {
   }
 }
 
+@media (max-width: 768px) {
+  .neon-game__hud {
+    padding: 0.75rem 0.85rem;
+  }
+
+  .neon-game__hud-top {
+    flex-wrap: wrap;
+    gap: 0.4rem 0.75rem;
+    justify-content: flex-start;
+  }
+
+  .neon-game__hud-top > * {
+    flex: 1 1 calc(33.333% - 0.5rem);
+    min-width: calc(33.333% - 0.5rem);
+    font-size: 0.7rem;
+  }
+
+  .neon-game__pause-btn {
+    font-size: 0.65rem;
+  }
+
+  .neon-game__weapon {
+    font-size: 0.65rem;
+    margin-top: 0.35rem;
+    margin-bottom: 8px;
+  }
+
+  .neon-game__health-dock {
+    top: calc(16vh - 24px);
+  }
+
+  .neon-game__wave-banner {
+    font-size: 0.85rem;
+  }
+
+  .neon-game__controls {
+    bottom: 80px;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .neon-game__title {
     animation: none;
