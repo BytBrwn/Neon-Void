@@ -1154,9 +1154,9 @@ export class NeonEngine {
       const sinL = Math.sin(longitude);
       const cosL = Math.cos(longitude);
 
-      let x3 = sinV * sinL;
-      let y3 = cosV;
-      let z3 = sinV * cosL;
+      const x3 = sinV * sinL;
+      const y3 = cosV;
+      const z3 = sinV * cosL;
 
       const cosS = Math.cos(spin);
       const sinS = Math.sin(spin);
