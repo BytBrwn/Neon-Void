@@ -1,0 +1,12 @@
+{
+  "foundryUrl": "https://jtatum.usw-23.palantirfoundry.com",
+  "widgetSet": {
+    "rid": "ri.widgetregistry..widget-set.839f5365-ccca-4f5f-b911-f98a7ea424a6",
+    "repository": "ri.stemma.main.repository.df713c22-d9ac-47a0-9f1f-e9315674f8e8",
+    "directory": "./dist",
+    "autoVersion": {
+      "type": "git-describe",
+      "tagPrefix": ""
+    }
+  }
+}
