@@ -4,14 +4,14 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "predev": "node scripts/ensure-game-link.mjs",
+    "prebuild": "node scripts/ensure-game-link.mjs",
     "build": "tsc && vite build",
     "dev": "vite",
-    "dev:standalone": "vite --config vite.standalone.config.ts",
     "dev:remote": "vite --mode code-workspaces",
-    "lint": "eslint . --report-unused-disable-directives --max-warnings 0",
+    "lint": "eslint src --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview",
-    "test": "vitest run --passWithNoTests",
-    "game:console": "node scripts/game-console.mjs"
+    "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
     "@custom-widget/sdk": "latest",

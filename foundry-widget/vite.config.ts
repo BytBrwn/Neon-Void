@@ -1,6 +1,11 @@
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import widgetManifestPlugin from "@osdk/widget.vite-plugin";
 import react from "@vitejs/plugin-react";
 import { defineConfig, loadEnv } from "vite";
+
+const packageRoot = path.dirname(fileURLToPath(import.meta.url));
+const gameSrc = path.resolve(packageRoot, "../game/src/game");
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
@@ -11,6 +16,11 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [react(), widgetManifestPlugin()],
+    resolve: {
+      alias: [
+        { find: /^\.\/game\//, replacement: `${gameSrc}/` },
+      ],
+    },
     base:
       process.env.NODE_ENV === "development"
         ? process.env.DEV_SERVER_BASE_PATH

@@ -10,7 +10,8 @@ import globals from "globals";
 import tseslint from "typescript-eslint";
 
 export default tseslint.config({
-  files: ["eslint.config.mjs", "src/**/*.{js,mjs,cjs,ts,jsx,tsx}"],
+  ignores: ["**/dist/**", "**/node_modules/**"],
+  files: ["eslint.config.mjs", "foundry-widget/**/*.{js,mjs,cjs,ts,jsx,tsx}", "game/**/*.{js,mjs,cjs,ts,jsx,tsx}"],
   settings: {
     react: {
       version: "detect",

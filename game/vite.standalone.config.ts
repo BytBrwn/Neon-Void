@@ -5,11 +5,11 @@ export default defineConfig({
   plugins: [react()],
   server: {
     port: 3000,
-    open: "/standalone.html",
+    open: "/",
   },
   build: {
     rollupOptions: {
-      input: ["./standalone.html"],
+      input: ["./index.html", "./standalone.html"],
     },
   },
 });

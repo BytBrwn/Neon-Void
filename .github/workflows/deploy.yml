@@ -24,21 +24,25 @@ jobs:
         with:
           node-version: 22
           cache: npm
+          cache-dependency-path: game/package-lock.json
 
       - name: Install dependencies
+        working-directory: game
         run: npm ci
 
       - name: Build standalone game
-        run: npx vite build --config vite.standalone.config.ts
+        working-directory: game
+        run: npm run build
 
       - name: Prepare GitHub Pages output
+        working-directory: game
         run: |
-          cp dist/standalone.html dist/index.html
+          test -f dist/index.html || cp dist/standalone.html dist/index.html
           echo "mayphex.com" > dist/CNAME
 
       - name: Deploy to gh-pages
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./dist
+          publish_dir: ./game/dist
           cname: mayphex.com

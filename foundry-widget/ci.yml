@@ -25,8 +25,8 @@ jobs:
 
         export NO_COLOR=1
         export FOUNDRY_TOKEN="${JOB_TOKEN}"
-        . .jemma/settings.sh
-        . .jemma/install-node.sh
+        . ../.jemma/settings.sh
+        . ../.jemma/install-node.sh
 
         npm_registry=${ARTIFACTS_API_URI}/repositories/${REPOSITORY_RID}/contents/release/npm/
         npm_registry_without_protocol=${npm_registry#https://}
