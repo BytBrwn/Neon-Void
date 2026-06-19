@@ -1,5 +1,5 @@
 import type { Bullet, Enemy, Vec2 } from "../types.js";
-import { GRAVITY_WELL_BASE_STRENGTH, GRAVITY_WELL_MAX_ACCEL } from "../constants.js";
+import { GRAVITY_WELL_BASE_STRENGTH, GRAVITY_WELL_MAX_ACCEL, MAX_BULLETS } from "../constants.js";
 
 export function shoot(
   bullets: Bullet[],
@@ -11,7 +11,11 @@ export function shoot(
   pierce = 0,
   damage = 14,
   tipOffset?: number,
+  radius?: number,
 ): void {
+  if (bullets.length >= MAX_BULLETS) {
+    bullets.shift();
+  }
   const offset = tipOffset ?? (friendly ? 24 : 16);
   bullets.push({
     x: from.x + Math.cos(angle) * offset,
@@ -20,7 +24,7 @@ export function shoot(
     vy: Math.sin(angle) * speed,
     life: friendly ? 1.6 : 2.2,
     hue,
-    radius: friendly ? 4.5 : 6,
+    radius: radius ?? (friendly ? 4.5 : 6),
     friendly,
     pierce,
     damage,
@@ -81,13 +85,25 @@ export function tickBullets(
   width: number,
   height: number,
   onFriendlyTrail?: (bullet: Bullet) => void,
-): Bullet[] {
-  for (const bullet of bullets) {
+): void {
+  let write = 0;
+  for (let read = 0; read < bullets.length; read += 1) {
+    const bullet = bullets[read];
     applyBulletGravityWells(bullet, enemies, dt);
     bullet.life -= dt;
     bullet.x += bullet.vx * dt;
     bullet.y += bullet.vy * dt;
     if (bullet.friendly && onFriendlyTrail) onFriendlyTrail(bullet);
+    if (
+      bullet.life > 0
+      && bullet.x > -40
+      && bullet.x < width + 40
+      && bullet.y > -40
+      && bullet.y < height + 40
+    ) {
+      if (write !== read) bullets[write] = bullet;
+      write += 1;
+    }
   }
-  return bullets.filter((b) => b.life > 0 && b.x > -40 && b.x < width + 40 && b.y > -40 && b.y < height + 40);
+  bullets.length = write;
 }

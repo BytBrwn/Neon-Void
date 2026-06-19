@@ -2,12 +2,7 @@ export type GamePhase = "menu" | "playing" | "paused" | "shop" | "sandbox" | "de
 
 export type Vec2 = { x: number; y: number };
 
-export type WeaponStats = {
-  fireRate: number;
-  spread: number;
-  pierce: number;
-  damage: number;
-};
+export type BlasterId = "pulse" | "rapid" | "scatter" | "lance" | "twin" | "nova";
 
 export type ShipSkinId = "interceptor" | "needle" | "bulwark" | "phantom" | "comet";
 
@@ -25,7 +20,8 @@ export type Player = {
   fireCooldown: number;
   invuln: number;
   engineGlow: number;
-  weapon: WeaponStats;
+  blaster: BlasterId;
+  overdrive: number;
   skin: ShipSkinId;
 };
 
@@ -123,10 +119,19 @@ export type ShopSkinOffer = {
   equipped: boolean;
 };
 
-export type ShopItemId = "rapid" | "spread" | "pierce" | "damage" | "repair" | "maxHealth" | "mega";
+export type ShopBlasterOffer = {
+  id: BlasterId;
+  label: string;
+  detail: string;
+  cost: number;
+  owned: boolean;
+  equipped: boolean;
+};
+
+export type ShopSupportId = "repair" | "maxHealth";
 
 export type ShopOffer = {
-  id: ShopItemId;
+  id: ShopSupportId;
   label: string;
   detail: string;
   cost: number;
@@ -150,9 +155,10 @@ export type GameSnapshot = {
   highScore: number;
   waveTotal: number;
   waveLeft: number;
-  weaponLabel: string;
+  blasterLabel: string;
   waveBanner: string;
   credits: number;
+  shopBlasters: ShopBlasterOffer[];
   shopOffers: ShopOffer[];
   shopSkins: ShopSkinOffer[];
   inSandbox: boolean;

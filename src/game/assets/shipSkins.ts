@@ -11,10 +11,9 @@ export type ShipSkinSpec = {
   fill: string;
   glow: string;
   thrustHue: number;
-  /** Distance from ship center to rear nozzle along -X */
   engineOffset: number;
-  /** Distance from ship center to muzzle along +X */
   muzzleOffset: number;
+  engineSpread: number;
   markup: string;
 };
 
@@ -28,11 +27,15 @@ export const SHIP_SKINS: Record<ShipSkinId, ShipSkinSpec> = {
     fill: "rgba(0, 255, 220, 0.22)",
     glow: "#b8ffff",
     thrustHue: 185,
-    engineOffset: 14,
-    muzzleOffset: 22,
+    engineOffset: 20,
+    muzzleOffset: 28,
+    engineSpread: 7,
     markup: `
-      <path d="M52 32 L18 46 L26 32 L18 18 Z" fill="url(#hull)" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
-      <path d="M24 32 L14 38 M24 32 L14 26" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" opacity="0.55"/>
+      <path d="M14 32 L26 24 L26 40 Z" fill="url(#hull)" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+      <path d="M14 32 L26 40 L26 24" fill="none" stroke="currentColor" stroke-width="1.2" opacity="0.4"/>
+      <path d="M26 28 L48 30 L48 34 L26 36 Z" fill="rgba(0,255,220,0.15)" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+      <rect x="46" y="29" width="10" height="6" rx="1.5" fill="rgba(180,255,250,0.35)" stroke="currentColor" stroke-width="1.4"/>
+      <circle cx="30" cy="32" r="2.2" fill="currentColor" opacity="0.55"/>
     `,
   },
   needle: {
@@ -44,11 +47,13 @@ export const SHIP_SKINS: Record<ShipSkinId, ShipSkinSpec> = {
     fill: "rgba(255, 80, 200, 0.18)",
     glow: "#ffccee",
     thrustHue: 310,
-    engineOffset: 16,
-    muzzleOffset: 24,
+    engineOffset: 22,
+    muzzleOffset: 30,
+    engineSpread: 5,
     markup: `
-      <path d="M54 32 L22 36 L28 32 L22 28 Z" fill="url(#hull)" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
-      <path d="M30 32 H16" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" opacity="0.5"/>
+      <path d="M16 32 L28 27 L28 37 Z" fill="url(#hull)" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+      <path d="M28 30 L50 31.5 L50 32.5 L28 34 Z" fill="rgba(255,80,200,0.12)" stroke="currentColor" stroke-width="1.6"/>
+      <rect x="48" y="30.5" width="12" height="3" rx="1" fill="currentColor" opacity="0.45"/>
     `,
   },
   bulwark: {
@@ -60,11 +65,13 @@ export const SHIP_SKINS: Record<ShipSkinId, ShipSkinSpec> = {
     fill: "rgba(255, 160, 60, 0.2)",
     glow: "#ffe0aa",
     thrustHue: 35,
-    engineOffset: 12,
-    muzzleOffset: 20,
+    engineOffset: 18,
+    muzzleOffset: 26,
+    engineSpread: 10,
     markup: `
-      <path d="M48 32 L16 44 L22 32 L16 20 Z" fill="url(#hull)" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"/>
-      <rect x="12" y="27" width="8" height="10" rx="1" fill="none" stroke="currentColor" stroke-width="1.2" opacity="0.45"/>
+      <path d="M12 32 L24 20 L24 44 Z" fill="url(#hull)" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+      <path d="M24 26 L44 28 L44 36 L24 38 Z" fill="rgba(255,160,60,0.18)" stroke="currentColor" stroke-width="2"/>
+      <rect x="42" y="28.5" width="11" height="7" rx="2" fill="rgba(255,200,120,0.35)" stroke="currentColor" stroke-width="1.5"/>
     `,
   },
   phantom: {
@@ -76,11 +83,13 @@ export const SHIP_SKINS: Record<ShipSkinId, ShipSkinSpec> = {
     fill: "rgba(150, 90, 255, 0.18)",
     glow: "#ddccff",
     thrustHue: 265,
-    engineOffset: 13,
-    muzzleOffset: 21,
+    engineOffset: 19,
+    muzzleOffset: 27,
+    engineSpread: 8,
     markup: `
-      <path d="M50 32 L32 44 L14 32 L32 20 Z" fill="url(#hull)" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
-      <circle cx="32" cy="32" r="4" fill="currentColor" opacity="0.35"/>
+      <path d="M16 32 L30 44 L30 20 Z" fill="url(#hull)" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+      <path d="M30 28 L46 30 L46 34 L30 36 Z" fill="rgba(150,90,255,0.14)" stroke="currentColor" stroke-width="1.6"/>
+      <rect x="44" y="29.5" width="9" height="5" rx="1.2" fill="currentColor" opacity="0.4"/>
     `,
   },
   comet: {
@@ -92,11 +101,14 @@ export const SHIP_SKINS: Record<ShipSkinId, ShipSkinSpec> = {
     fill: "rgba(60, 255, 230, 0.16)",
     glow: "#ccfff8",
     thrustHue: 170,
-    engineOffset: 15,
-    muzzleOffset: 23,
+    engineOffset: 21,
+    muzzleOffset: 29,
+    engineSpread: 9,
     markup: `
-      <path d="M50 32 L24 40 L30 32 L24 24 Z" fill="url(#hull)" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
-      <path d="M20 40 L10 46 M20 24 L10 18" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+      <path d="M14 32 L26 22 L26 42 Z" fill="url(#hull)" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+      <path d="M10 40 L18 36 M10 24 L18 28" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" opacity="0.5"/>
+      <path d="M26 29 L47 31 L47 33 L26 35 Z" fill="rgba(60,255,230,0.14)" stroke="currentColor" stroke-width="1.6"/>
+      <rect x="45" y="30" width="10" height="4" rx="1" fill="currentColor" opacity="0.42"/>
     `,
   },
 };
@@ -129,6 +141,7 @@ function svgToDataUrl(svg: string): string {
 }
 
 const iconImages: Partial<Record<ShipSkinId, HTMLImageElement>> = {};
+const previewUrls: Partial<Record<ShipSkinId, string>> = {};
 let iconsReady = false;
 
 export function getShipSkinSpec(id: ShipSkinId): ShipSkinSpec {
@@ -136,7 +149,11 @@ export function getShipSkinSpec(id: ShipSkinId): ShipSkinSpec {
 }
 
 export function getShipSkinPreviewUrl(id: ShipSkinId): string {
-  return svgToDataUrl(buildSvg(SHIP_SKINS[id]));
+  const cached = previewUrls[id];
+  if (cached) return cached;
+  const url = svgToDataUrl(buildSvg(SHIP_SKINS[id]));
+  previewUrls[id] = url;
+  return url;
 }
 
 export function loadShipSkins(): Promise<void> {

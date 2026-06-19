@@ -23,14 +23,15 @@ The engine **delegates** to systems and factories; it should not grow new domain
 | Path | Exports |
 |------|---------|
 | `factories/enemyFactory.ts` | `createEnemy`, `ENEMY_SCORE`, `ENEMY_CREDITS` |
+| `factories/planetFactory.ts` | `createBackgroundField`, procedural SVG planets |
 
-Root shims (`shipSkins.ts`, `powerupIcons.ts`) re-export from `assets/`.
+Root shims (`planetFactory.ts`, `shipSkins.ts`, `powerupIcons.ts`) re-export from `factories/` and `assets/`.
 
 ## Systems (pure tick / rules)
 
 | Path | Responsibility |
 |------|----------------|
-| `systems/ambient.ts` | Stars and shooting stars (`AmbientField`) |
+| `systems/ambient.ts` | Stars, shooting stars, background planets (`AmbientField`) |
 | `systems/bullets.ts` | `shoot`, gravity wells, `tickBullets` |
 | `systems/particles.ts` | Burst, shockwave, `tickParticles` |
 | `systems/powerups.ts` | Drop rolls, apply effects, `tickPowerups` |

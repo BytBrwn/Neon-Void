@@ -2,9 +2,15 @@ import type { Particle } from "../types.js";
 import { MAX_PARTICLES } from "../constants.js";
 import { rand, TAU } from "../math.js";
 
+let particleWriteCursor = 0;
+
 export function pushParticle(particles: Particle[], particle: Particle): void {
-  if (particles.length >= MAX_PARTICLES) particles.shift();
-  particles.push(particle);
+  if (particles.length < MAX_PARTICLES) {
+    particles.push(particle);
+    return;
+  }
+  particles[particleWriteCursor % MAX_PARTICLES] = particle;
+  particleWriteCursor += 1;
 }
 
 export function burst(
@@ -56,13 +62,19 @@ export function shockwave(
   }
 }
 
-export function tickParticles(particles: Particle[], dt: number): Particle[] {
-  return particles.filter((p) => {
+export function tickParticles(particles: Particle[], dt: number): void {
+  let write = 0;
+  for (let read = 0; read < particles.length; read += 1) {
+    const p = particles[read];
     p.life -= dt;
     p.x += p.vx * dt;
     p.y += p.vy * dt;
     p.vx *= 0.985;
     p.vy *= 0.985;
-    return p.life > 0;
-  });
+    if (p.life > 0) {
+      if (write !== read) particles[write] = p;
+      write += 1;
+    }
+  }
+  particles.length = write;
 }

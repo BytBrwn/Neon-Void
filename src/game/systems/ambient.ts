@@ -1,6 +1,13 @@
 import type { Player, ShootingStar, Star } from "../types.js";
-import { STAR_FIELD_COUNT, TAU } from "../constants.js";
+import { BACKGROUND_PLANET_COUNT, STAR_FIELD_COUNT, TAU } from "../constants.js";
 import { rand } from "../math.js";
+import {
+  createBackgroundField,
+  loadPlanetImage,
+  planetDrawSize,
+  respawnBackgroundPlanet,
+  type BackgroundPlanet,
+} from "../factories/planetFactory.js";
 
 export type AmbientMotion = {
   width: number;
@@ -12,6 +19,7 @@ export type AmbientMotion = {
 export class AmbientField {
   stars: Star[] = [];
   shootingStars: ShootingStar[] = [];
+  backgroundPlanets: BackgroundPlanet[] = [];
   shootingStarTimer = 3.5;
 
   ensureInitialized(width: number, height: number): void {
@@ -23,11 +31,51 @@ export class AmbientField {
         twinkle: Math.random() * TAU,
       }));
     }
+    if (this.backgroundPlanets.length === 0) {
+      this.backgroundPlanets = createBackgroundField(width, height, BACKGROUND_PLANET_COUNT);
+      for (const planet of this.backgroundPlanets) {
+        void loadPlanetImage(planet.spec);
+      }
+    }
   }
 
   update(dt: number, motion: AmbientMotion): void {
+    this.updatePlanets(dt, motion);
     this.updateStars(dt, motion);
     this.updateShootingStars(dt, motion);
+  }
+
+  updatePlanets(dt: number, { width, height, time, player }: AmbientMotion): void {
+    const travelX = -player.vx * 0.42;
+    const travelY = -player.vy * 0.42 + 28;
+
+    for (const planet of this.backgroundPlanets) {
+      const parallax = planet.depth;
+      planet.x += (travelX * parallax + Math.sin(time * 0.06 + planet.depth * 5) * 3.5) * dt;
+      planet.y += (travelY * parallax + 18 + parallax * 28) * dt;
+
+      const size = planetDrawSize(planet.spec, planet.depth);
+      const margin = size * 0.7;
+      if (
+        planet.y > height + margin ||
+        planet.x < -margin ||
+        planet.x > width + margin ||
+        planet.y < -margin * 2
+      ) {
+        const next = respawnBackgroundPlanet(
+          this.backgroundPlanets,
+          planet,
+          width,
+          height,
+          { vx: player.vx, vy: player.vy },
+        );
+        planet.x = next.x;
+        planet.y = next.y;
+        planet.depth = next.depth;
+        planet.spec = next.spec;
+        void loadPlanetImage(planet.spec);
+      }
+    }
   }
 
   updateStars(dt: number, { width, height, time, player }: AmbientMotion): void {
@@ -68,7 +116,15 @@ export class AmbientField {
       streak.x += streak.vx * dt;
       streak.y += streak.vy * dt;
     }
-    this.shootingStars = this.shootingStars.filter((streak) => streak.life > 0);
+    let write = 0;
+    for (let read = 0; read < this.shootingStars.length; read += 1) {
+      const streak = this.shootingStars[read];
+      if (streak.life > 0) {
+        if (write !== read) this.shootingStars[write] = streak;
+        write += 1;
+      }
+    }
+    this.shootingStars.length = write;
   }
 
   spawnShootingStar(motion: AmbientMotion, fast: boolean): void {

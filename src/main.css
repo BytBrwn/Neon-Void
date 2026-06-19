@@ -219,6 +219,13 @@ body {
   will-change: transform, opacity, left, top;
 }
 
+.neon-game__health-fragments {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+}
+
 .neon-game__weapon {
   margin: 0.45rem 0 0;
   font-size: 0.62rem;

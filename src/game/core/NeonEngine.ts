@@ -1,4 +1,5 @@
 import type {
+  BlasterId,
   Bullet,
   Enemy,
   EnemyKind,
@@ -8,15 +9,17 @@ import type {
   Particle,
   Player,
   Powerup,
-  ShopItemId,
+  ShopBlasterOffer,
   ShopOffer,
   ShopSkinOffer,
+  ShopSupportId,
   ShipSkinId,
   Vec2,
-  WeaponStats,
 } from "../types.js";
 import { getPowerupIcon, loadPowerupIcons } from "../assets/powerupIcons.js";
+import { blasterLabel as formatBlasterLabel, computeBlasterVolley, getBlasterDef, BLASTERS } from "../factories/blasterFactory.js";
 import { createEnemy as buildEnemy, ENEMY_CREDITS, ENEMY_SCORE } from "../factories/enemyFactory.js";
+import { getPlanetImage, planetDrawSize } from "../factories/planetFactory.js";
 import { createGameLogger, type GameLogger } from "../console/logger.js";
 import { getShipSkinImage, getShipSkinSpec, loadShipSkins, SHIP_SKINS, type ShipSkinSpec } from "../assets/shipSkins.js";
 import {
@@ -26,20 +29,23 @@ import {
   lerpAngle,
   normalize,
   rand,
-  randomEdgePoint,
+  randomEdgePoint as mathRandomEdgePoint,
   TAU,
   waveScale as computeWaveScale,
 } from "../math.js";
 import {
+  loadEquippedBlaster,
   loadEquippedSkin,
   loadHighScore,
+  loadOwnedBlasters,
   loadOwnedSkins,
+  saveBlasterProgress,
   saveHighScore,
   saveSkinProgress,
 } from "../persistence.js";
-import { AmbientField } from "../systems/ambient.js";
+import { AmbientField, type AmbientMotion } from "../systems/ambient.js";
 import { enemyGravityRadius, shoot as spawnBullet, tickBullets } from "../systems/bullets.js";
-import { burst, pushParticle, shockwave, tickParticles } from "../systems/particles.js";
+import { burst as particleBurst, pushParticle, shockwave as particleShockwave, tickParticles } from "../systems/particles.js";
 import {
   applyPowerup,
   createPowerupDrop,
@@ -47,18 +53,26 @@ import {
   tickPowerups,
 } from "../systems/powerups.js";
 import {
-  applyShopItem,
+  applyShopSupport as applyShopSupportEffect,
+  buildShopBlasters,
   buildShopOffers,
   buildShopSkins,
-  weaponLabel as formatWeaponLabel,
 } from "../systems/shop.js";
 import {
-  isBossWave,
-  isShopWave,
-  pickSpawnKind,
-  randomWaveCount,
+  isBossWave as wavesIsBossWave,
+  isShopWave as wavesIsShopWave,
+  pickSpawnKind as wavesPickSpawnKind,
+  randomWaveCount as wavesRandomWaveCount,
   waveClearBonus,
 } from "../systems/waves.js";
+
+const CONTACT_DAMAGE: Partial<Record<EnemyKind, number>> = {
+  boss: 26,
+  tank: 22,
+  bomber: 20,
+  stalker: 18,
+  sentinel: 17,
+};
 
 export class NeonEngine {
   width = 0;
@@ -81,9 +95,12 @@ export class NeonEngine {
   bossQueued = false;
   maxHealthPurchases = 0;
   shopOffers: ShopOffer[] = [];
+  shopBlasters: ShopBlasterOffer[] = [];
   shopSkins: ShopSkinOffer[] = [];
   ownedSkins: Set<ShipSkinId> = new Set(["interceptor"]);
+  ownedBlasters: Set<BlasterId> = new Set(["pulse"]);
   equippedSkin: ShipSkinId = "interceptor";
+  equippedBlaster: BlasterId = "pulse";
   waveClearPending = false;
   inSandbox = false;
   roundFrozen = false;
@@ -97,6 +114,14 @@ export class NeonEngine {
   powerups: Powerup[] = [];
   readonly ambient = new AmbientField();
   private readonly log: GameLogger;
+  private readonly ambientMotion: AmbientMotion = {
+    width: 0,
+    height: 0,
+    time: 0,
+    player: this.player,
+  };
+  private bgLinearGradient: CanvasGradient | null = null;
+  private bgRadialGradient: CanvasGradient | null = null;
 
   constructor() {
     this.log = createGameLogger(() => ({
@@ -110,8 +135,14 @@ export class NeonEngine {
     this.highScore = loadHighScore();
     this.ownedSkins = loadOwnedSkins();
     this.equippedSkin = loadEquippedSkin(this.ownedSkins);
+    this.ownedBlasters = loadOwnedBlasters();
+    this.equippedBlaster = loadEquippedBlaster(this.ownedBlasters);
     void loadPowerupIcons();
     void loadShipSkins();
+  }
+
+  saveOwnedBlasters(): void {
+    saveBlasterProgress(this.ownedBlasters, this.equippedBlaster);
   }
 
   saveOwnedSkins(): void {
@@ -121,14 +152,23 @@ export class NeonEngine {
   resize(width: number, height: number): void {
     this.width = width;
     this.height = height;
+    this.bgLinearGradient = null;
+    this.bgRadialGradient = null;
     this.ambient.ensureInitialized(width, height);
     if (this.phase === "menu") {
       this.player = this.createPlayer();
     }
   }
 
-  defaultWeapon(): WeaponStats {
-    return { fireRate: 0, spread: 0, pierce: 0, damage: 0 };
+  destroy(): void {
+    this.bullets.length = 0;
+    this.enemies.length = 0;
+    this.particles.length = 0;
+    this.powerups.length = 0;
+    this.ambient.shootingStars.length = 0;
+    this.shopOffers = [];
+    this.shopBlasters = [];
+    this.shopSkins = [];
   }
 
   createPlayer(): Player {
@@ -146,7 +186,8 @@ export class NeonEngine {
       fireCooldown: 0,
       invuln: 0,
       engineGlow: 0,
-      weapon: this.defaultWeapon(),
+      blaster: this.equippedBlaster,
+      overdrive: 0,
       skin: this.equippedSkin,
     };
   }
@@ -177,8 +218,9 @@ export class NeonEngine {
     return computeWaveScale(this.wave);
   }
 
-  weaponLabel(): string {
-    return formatWeaponLabel(this.player.weapon);
+  blasterLabel(): string {
+    const label = formatBlasterLabel(this.player.blaster);
+    return this.player.overdrive > 0 ? `${label} · OVERDRIVE` : label;
   }
 
   togglePause(): void {
@@ -237,9 +279,10 @@ export class NeonEngine {
       highScore: this.highScore,
       waveTotal: this.waveTargetCount,
       waveLeft,
-      weaponLabel: this.weaponLabel(),
+      blasterLabel: this.blasterLabel(),
       waveBanner: this.waveBanner,
       credits: this.credits,
+      shopBlasters: this.shopBlasters,
       shopOffers: this.shopOffers,
       shopSkins: this.shopSkins,
       inSandbox: this.inSandbox,
@@ -249,23 +292,23 @@ export class NeonEngine {
   }
 
   randomEdgePoint(): Vec2 {
-    return randomEdgePoint(this.width, this.height);
+    return mathRandomEdgePoint(this.width, this.height);
   }
 
   randomWaveCount(): number {
-    return randomWaveCount(this.wave);
+    return wavesRandomWaveCount(this.wave);
   }
 
   pickSpawnKind(): EnemyKind {
-    return pickSpawnKind(this.wave);
+    return wavesPickSpawnKind(this.wave);
   }
 
   isBossWave(): boolean {
-    return isBossWave(this.wave);
+    return wavesIsBossWave(this.wave);
   }
 
   isShopWave(): boolean {
-    return isShopWave(this.wave);
+    return wavesIsShopWave(this.wave);
   }
 
   beginWave(initial = false): void {
@@ -305,7 +348,11 @@ export class NeonEngine {
   }
 
   refreshShopOffers(): void {
-    this.shopOffers = buildShopOffers(this.player, this.maxHealthPurchases, this.wave);
+    this.shopOffers = buildShopOffers(this.player, this.maxHealthPurchases);
+  }
+
+  refreshShopBlasters(): void {
+    this.shopBlasters = buildShopBlasters(this.player, this.ownedBlasters);
   }
 
   refreshShopSkins(): void {
@@ -333,29 +380,52 @@ export class NeonEngine {
     return true;
   }
 
+  buyOrEquipBlaster(id: BlasterId): boolean {
+    if (this.phase !== "shop") return false;
+    if (this.player.blaster === id && this.ownedBlasters.has(id)) return false;
+    if (!this.ownedBlasters.has(id)) {
+      const spec = BLASTERS[id];
+      if (this.credits < spec.cost) return false;
+      this.credits -= spec.cost;
+      this.ownedBlasters.add(id);
+      this.saveOwnedBlasters();
+    }
+    this.player.blaster = id;
+    this.equippedBlaster = id;
+    this.saveOwnedBlasters();
+    this.refreshShopBlasters();
+    this.shockwave(this.width * 0.5, this.height * 0.5, BLASTERS[id].hue, 0.5);
+    return true;
+  }
+
   openShop(): void {
     this.phase = "shop";
     this.waveBanner = "VOID SHOP OPEN";
     this.refreshShopOffers();
+    this.refreshShopBlasters();
     this.refreshShopSkins();
     this.shockwave(this.width * 0.5, this.height * 0.45, 55, 0.8);
     this.log.shopOpen();
   }
 
-  applyShopItem(id: ShopItemId): void {
-    this.maxHealthPurchases = applyShopItem(id, this.player, this.maxHealthPurchases);
+  applyShopSupport(id: ShopSupportId): void {
+    this.maxHealthPurchases = applyShopSupportEffect(id, this.player, this.maxHealthPurchases);
     this.shockwave(this.width * 0.5, this.height * 0.5, 120, 0.5);
   }
 
-  buyShopItem(id: ShopItemId): boolean {
+  buyShopSupport(id: ShopSupportId): boolean {
     if (this.phase !== "shop") return false;
     const offer = this.shopOffers.find((item) => item.id === id);
     if (!offer || offer.soldOut || this.credits < offer.cost) return false;
     this.credits -= offer.cost;
-    this.applyShopItem(id);
+    this.applyShopSupport(id);
     this.refreshShopOffers();
     this.log.shopPurchase(id, offer.cost, this.credits);
     return true;
+  }
+
+  buyShopItem(id: ShopSupportId): boolean {
+    return this.buyShopSupport(id);
   }
 
   leaveShop(): void {
@@ -538,11 +608,11 @@ export class NeonEngine {
   }
 
   burst(x: number, y: number, hue: number, amount: number, speed: number): void {
-    burst(this.particles, x, y, hue, amount, speed);
+    particleBurst(this.particles, x, y, hue, amount, speed);
   }
 
   shockwave(x: number, y: number, hue: number, strength = 1): void {
-    shockwave(this.particles, x, y, hue, strength);
+    particleShockwave(this.particles, x, y, hue, strength);
   }
 
   shoot(from: Vec2, angle: number, friendly: boolean, speed: number, hue: number, pierce = 0, damage = 14, tipOffset?: number): void {
@@ -601,13 +671,12 @@ export class NeonEngine {
   }
 
   updateAmbient(dt: number): void {
-    this.ambient.update(dt, {
-      width: this.width,
-      height: this.height,
-      time: this.time,
-      player: this.player,
-    });
-    this.particles = tickParticles(this.particles, dt);
+    this.ambientMotion.width = this.width;
+    this.ambientMotion.height = this.height;
+    this.ambientMotion.time = this.time;
+    this.ambientMotion.player = this.player;
+    this.ambient.update(dt, this.ambientMotion);
+    tickParticles(this.particles, dt);
     this.shake = Math.max(0, this.shake - dt * 24);
     if (this.comboTimer > 0) {
       this.comboTimer -= dt;
@@ -692,10 +761,16 @@ export class NeonEngine {
       p.engineGlow = clamp(p.engineGlow + dt * 3.5, 0, 1);
       this.engineTimer -= dt;
       if (this.engineTimer <= 0) {
-        this.engineTimer = 0.032;
-        const nozzle = this.nozzlePoint();
+        this.engineTimer = 0.028;
         const spec = this.playerSkinSpec();
-        this.burst(nozzle.x, nozzle.y, spec.thrustHue + this.time * 30, 2, 70 + p.engineGlow * 50);
+        const spread = spec.engineSpread;
+        for (const side of [-1, 1]) {
+          const nozzle = {
+            x: p.x - Math.cos(p.angle) * spec.engineOffset + Math.cos(p.angle + Math.PI / 2) * spread * side,
+            y: p.y - Math.sin(p.angle) * spec.engineOffset + Math.sin(p.angle + Math.PI / 2) * spread * side,
+          };
+          this.burst(nozzle.x, nozzle.y, spec.thrustHue + this.time * 30, 2, 80 + p.engineGlow * 60);
+        }
       }
     } else {
       p.vx *= coastDrag;
@@ -738,38 +813,43 @@ export class NeonEngine {
 
     p.fireCooldown = Math.max(0, p.fireCooldown - dt);
     p.invuln = Math.max(0, p.invuln - dt);
+    p.overdrive = Math.max(0, p.overdrive - dt);
 
     const firing = input.mouseDown || input.keys.has("Space") || input.keys.has("KeyJ");
     if (firing && p.fireCooldown <= 0) {
-      const w = p.weapon;
-      const hue = 155 + (this.combo % 7) * 28;
-      const comboPierce = this.combo >= 5 ? 2 : this.combo >= 2 ? 1 : 0;
-      const pierce = comboPierce + w.pierce;
-      const damage = 14 + this.combo * 2 + w.damage * 5;
-      const spreadBase = 0.045 + w.spread * 0.035;
-      const shotCount = 3 + w.spread * 2;
-      const half = (shotCount - 1) / 2;
+      const volley = computeBlasterVolley(p.blaster, this.combo, p.overdrive);
       const muzzle = this.muzzlePoint();
-      for (let i = 0; i < shotCount; i += 1) {
-        const offset = (i - half) * spreadBase;
-        this.shoot(muzzle, p.aimAngle + offset, true, 820 - Math.abs(offset) * 120, hue + i * 6, pierce, damage, 3);
+      for (const shot of volley.shots) {
+        spawnBullet(
+          this.bullets,
+          muzzle,
+          p.aimAngle + shot.angleOffset,
+          true,
+          shot.speed,
+          shot.hue,
+          shot.pierce,
+          shot.damage,
+          shot.tipOffset,
+          shot.radius,
+        );
       }
-      p.vx -= Math.cos(p.aimAngle) * 14;
-      p.vy -= Math.sin(p.aimAngle) * 14;
-      const baseCooldown = clamp(0.1 - w.fireRate * 0.016 - this.combo * 0.004, 0.028, 0.1);
-      p.fireCooldown = baseCooldown;
+      p.vx -= Math.cos(p.aimAngle) * volley.recoil;
+      p.vy -= Math.sin(p.aimAngle) * volley.recoil;
+      p.fireCooldown = volley.cooldown;
+      const blaster = getBlasterDef(p.blaster);
+      this.burst(muzzle.x, muzzle.y, blaster.hue, 3, 90);
     }
   }
 
   updateBullets(dt: number): void {
-    this.bullets = tickBullets(
+    tickBullets(
       this.bullets,
       this.enemies,
       dt,
       this.width,
       this.height,
       (bullet) => {
-        if (Math.random() < dt * 28) {
+        if (Math.random() < dt * 16) {
           this.addParticle({
             x: bullet.x - bullet.vx * 0.012,
             y: bullet.y - bullet.vy * 0.012,
@@ -920,7 +1000,7 @@ export class NeonEngine {
   }
 
   updatePowerups(dt: number): void {
-    this.powerups = tickPowerups(this.powerups, this.player, dt, this.height, (powerup) => {
+    tickPowerups(this.powerups, this.player, dt, this.height, (powerup) => {
       this.collectPowerup(powerup);
     });
   }
@@ -969,10 +1049,7 @@ export class NeonEngine {
     }
     for (const enemy of this.enemies) {
       if (playerInvuln || dist(enemy, p) >= enemy.radius + p.radius) continue;
-      const contactDamage: Partial<Record<EnemyKind, number>> = {
-        boss: 26, tank: 22, bomber: 20, stalker: 18, sentinel: 17,
-      };
-      this.hitPlayer(contactDamage[enemy.kind] ?? 14, `contact:${enemy.kind}`);
+      this.hitPlayer(CONTACT_DAMAGE[enemy.kind] ?? 14, `contact:${enemy.kind}`);
       if (enemy.kind !== "boss" && enemy.kind !== "tank" && enemy.kind !== "sentinel") {
         this.killEnemy(enemy);
       }
@@ -1064,7 +1141,7 @@ export class NeonEngine {
     ctx.save();
     ctx.translate(shakeX, shakeY);
     this.drawBackground(ctx);
-    this.drawGrid(ctx);
+    this.drawBackgroundPlanets(ctx);
     this.drawStars(ctx);
     this.drawShootingStars(ctx);
     for (const particle of this.particles) {
@@ -1115,123 +1192,50 @@ export class NeonEngine {
   }
 
   drawBackground(ctx: CanvasRenderingContext2D): void {
-    const g = ctx.createLinearGradient(0, 0, this.width, this.height);
-    g.addColorStop(0, "#030014");
-    g.addColorStop(0.5, "#0a0024");
-    g.addColorStop(1, "#120030");
-    ctx.fillStyle = g;
+    if (!this.bgLinearGradient) {
+      const g = ctx.createLinearGradient(0, 0, this.width, this.height);
+      g.addColorStop(0, "#030014");
+      g.addColorStop(0.5, "#0a0024");
+      g.addColorStop(1, "#120030");
+      this.bgLinearGradient = g;
+    }
+    ctx.fillStyle = this.bgLinearGradient;
     ctx.fillRect(0, 0, this.width, this.height);
+
     const pulse = 0.5 + Math.sin(this.time * 0.8) * 0.15;
-    const rg = ctx.createRadialGradient(this.width * 0.5, this.height * 0.45, 40, this.width * 0.5, this.height * 0.45, this.width * 0.55);
-    rg.addColorStop(0, `rgba(120, 0, 255, ${0.12 * pulse})`);
-    rg.addColorStop(0.5, `rgba(0, 255, 220, ${0.06 * pulse})`);
-    rg.addColorStop(1, "rgba(0,0,0,0)");
-    ctx.fillStyle = rg;
+    if (!this.bgRadialGradient) {
+      const rg = ctx.createRadialGradient(
+        this.width * 0.5,
+        this.height * 0.45,
+        40,
+        this.width * 0.5,
+        this.height * 0.45,
+        this.width * 0.55,
+      );
+      rg.addColorStop(0, "rgba(120, 0, 255, 0.12)");
+      rg.addColorStop(0.5, "rgba(0, 255, 220, 0.06)");
+      rg.addColorStop(1, "rgba(0,0,0,0)");
+      this.bgRadialGradient = rg;
+    }
+    ctx.save();
+    ctx.globalAlpha = pulse;
+    ctx.fillStyle = this.bgRadialGradient;
     ctx.fillRect(0, 0, this.width, this.height);
+    ctx.restore();
   }
 
-  drawGrid(ctx: CanvasRenderingContext2D): void {
-    const cx = this.width * 0.5 - this.player.vx * 0.035;
-    const cy = this.height * 1.28 - this.player.vy * 0.025;
-    const radius = this.height * 0.94;
-    const spin = this.time * 0.04 + this.player.vx * 0.0002;
-    const latLines = 11;
-    const lonLines = 22;
-    const domeSpan = Math.PI * 0.54;
-    const cameraTilt = 0.62;
-
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(0, this.height * 0.38, this.width, this.height * 0.62);
-    ctx.clip();
-    ctx.globalAlpha = 0.34;
-    ctx.strokeStyle = "rgba(0, 255, 220, 0.48)";
-    ctx.lineWidth = 1;
-
-    const project = (colatitude: number, longitude: number): { x: number; y: number } | null => {
-      const sinV = Math.sin(colatitude);
-      const cosV = Math.cos(colatitude);
-      const sinL = Math.sin(longitude);
-      const cosL = Math.cos(longitude);
-
-      const x3 = sinV * sinL;
-      const y3 = cosV;
-      const z3 = sinV * cosL;
-
-      const cosS = Math.cos(spin);
-      const sinS = Math.sin(spin);
-      const xRot = x3 * cosS + z3 * sinS;
-      const zRot = -x3 * sinS + z3 * cosS;
-      const yRot = y3;
-
-      const yCam = yRot * Math.cos(cameraTilt) - zRot * Math.sin(cameraTilt);
-      const zCam = yRot * Math.sin(cameraTilt) + zRot * Math.cos(cameraTilt);
-
-      if (zCam < -0.08) return null;
-
-      const depth = 0.78 + zCam * 0.24;
-      return {
-        x: cx + xRot * radius * depth,
-        y: cy - yCam * radius * depth,
-      };
-    };
-
-    const drawParallel = (colatitude: number): void => {
-      ctx.beginPath();
-      let drawing = false;
-      const steps = 64;
-      for (let s = 0; s <= steps; s += 1) {
-        const longitude = (s / steps) * TAU;
-        const point = project(colatitude, longitude);
-        if (!point || point.y > this.height + 20) {
-          drawing = false;
-          continue;
-        }
-        if (!drawing) {
-          ctx.moveTo(point.x, point.y);
-          drawing = true;
-        } else {
-          ctx.lineTo(point.x, point.y);
-        }
-      }
-      ctx.stroke();
-    };
-
-    const drawMeridian = (longitude: number): void => {
-      ctx.beginPath();
-      let drawing = false;
-      const steps = 28;
-      for (let s = 0; s <= steps; s += 1) {
-        const colatitude = (s / steps) * domeSpan;
-        const point = project(colatitude, longitude);
-        if (!point || point.y > this.height + 20) {
-          drawing = false;
-          continue;
-        }
-        if (!drawing) {
-          ctx.moveTo(point.x, point.y);
-          drawing = true;
-        } else {
-          ctx.lineTo(point.x, point.y);
-        }
-      }
-      ctx.stroke();
-    };
-
-    for (let i = 1; i < latLines; i += 1) {
-      drawParallel((i / latLines) * domeSpan);
+  drawBackgroundPlanets(ctx: CanvasRenderingContext2D): void {
+    const planets = this.ambient.backgroundPlanets;
+    planets.sort((a, b) => a.depth - b.depth);
+    for (const planet of planets) {
+      const img = getPlanetImage(planet.spec.seed);
+      if (!img) continue;
+      const size = planetDrawSize(planet.spec, planet.depth);
+      ctx.save();
+      ctx.globalAlpha = 0.24 + planet.depth * 0.48;
+      ctx.drawImage(img, planet.x - size * 0.5, planet.y - size * 0.5, size, size);
+      ctx.restore();
     }
-
-    for (let j = 0; j < lonLines; j += 1) {
-      drawMeridian((j / lonLines) * TAU);
-    }
-
-    ctx.globalAlpha = 0.42;
-    ctx.lineWidth = 1.35;
-    ctx.strokeStyle = "rgba(120, 255, 230, 0.55)";
-    drawParallel(domeSpan * 0.98);
-
-    ctx.restore();
   }
 
   drawWaveBanner(ctx: CanvasRenderingContext2D): void {
@@ -1285,8 +1289,9 @@ export class NeonEngine {
   drawPlayer(ctx: CanvasRenderingContext2D): void {
     const p = this.player;
     const spec = this.playerSkinSpec();
+    const blaster = getBlasterDef(p.blaster);
     const blink = p.invuln > 0 && Math.floor(this.time * 22) % 2 === 0;
-    const speedLen = Math.min(16, Math.hypot(p.vx, p.vy) * 0.035);
+    const speedLen = Math.min(20, Math.hypot(p.vx, p.vy) * 0.04);
     const shipSize = 56;
     const half = shipSize / 2;
 
@@ -1296,28 +1301,27 @@ export class NeonEngine {
     ctx.rotate(p.bank);
 
     if (p.engineGlow > 0.05) {
-      const len = 8 + p.engineGlow * 18 + speedLen;
-      const alpha = 0.28 + p.engineGlow * 0.42;
-      ctx.save();
-      ctx.translate(-spec.engineOffset, 0);
-      ctx.shadowColor = `hsla(${spec.thrustHue}, 100%, 55%, ${alpha})`;
-      ctx.shadowBlur = 14 + p.engineGlow * 10;
-      ctx.fillStyle = `hsla(${spec.thrustHue + 20}, 100%, 62%, ${alpha})`;
-      ctx.beginPath();
-      ctx.moveTo(0, 0);
-      ctx.lineTo(-len, -5);
-      ctx.lineTo(-len * 0.72, 0);
-      ctx.lineTo(-len, 5);
-      ctx.closePath();
-      ctx.fill();
-      ctx.fillStyle = `hsla(${spec.thrustHue + 40}, 100%, 78%, ${alpha * 0.85})`;
-      ctx.beginPath();
-      ctx.moveTo(0, 0);
-      ctx.lineTo(-len * 0.55, -2.5);
-      ctx.lineTo(-len * 0.55, 2.5);
-      ctx.closePath();
-      ctx.fill();
-      ctx.restore();
+      const len = 10 + p.engineGlow * 22 + speedLen;
+      const alpha = 0.32 + p.engineGlow * 0.48;
+      for (const side of [-1, 1]) {
+        ctx.save();
+        ctx.translate(-spec.engineOffset, spec.engineSpread * side);
+        ctx.shadowColor = `hsla(${spec.thrustHue}, 100%, 55%, ${alpha})`;
+        ctx.shadowBlur = 16 + p.engineGlow * 12;
+        const grad = ctx.createLinearGradient(0, 0, -len, 0);
+        grad.addColorStop(0, `hsla(${spec.thrustHue + 35}, 100%, 82%, ${alpha})`);
+        grad.addColorStop(0.45, `hsla(${spec.thrustHue + 10}, 100%, 58%, ${alpha * 0.85})`);
+        grad.addColorStop(1, `hsla(${spec.thrustHue}, 95%, 42%, 0)`);
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.lineTo(-len, -4.5);
+        ctx.lineTo(-len * 0.65, 0);
+        ctx.lineTo(-len, 4.5);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+      }
     }
 
     if (!blink) {
@@ -1342,6 +1346,38 @@ export class NeonEngine {
         ctx.fill();
         ctx.stroke();
       }
+
+      const aimDelta = p.aimAngle - p.angle;
+      ctx.save();
+      ctx.rotate(aimDelta);
+      ctx.fillStyle = `hsla(${blaster.hue}, 90%, 55%, 0.55)`;
+      ctx.strokeStyle = `hsla(${blaster.hue}, 100%, 72%, 0.95)`;
+      ctx.lineWidth = 1.6;
+      ctx.shadowColor = `hsla(${blaster.hue}, 100%, 60%, 0.8)`;
+      ctx.shadowBlur = p.overdrive > 0 ? 16 : 10;
+      ctx.beginPath();
+      const bx = spec.muzzleOffset - 2;
+      const by = -blaster.barrelWidth * 0.5;
+      const bw = blaster.barrelLength;
+      const bh = blaster.barrelWidth;
+      const br = 2;
+      ctx.moveTo(bx + br, by);
+      ctx.lineTo(bx + bw - br, by);
+      ctx.quadraticCurveTo(bx + bw, by, bx + bw, by + br);
+      ctx.lineTo(bx + bw, by + bh - br);
+      ctx.quadraticCurveTo(bx + bw, by + bh, bx + bw - br, by + bh);
+      ctx.lineTo(bx + br, by + bh);
+      ctx.quadraticCurveTo(bx, by + bh, bx, by + bh - br);
+      ctx.lineTo(bx, by + br);
+      ctx.quadraticCurveTo(bx, by, bx + br, by);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = `hsla(${blaster.hue}, 100%, 88%, ${0.7 + (p.overdrive > 0 ? 0.2 : 0)})`;
+      ctx.beginPath();
+      ctx.arc(spec.muzzleOffset + blaster.barrelLength, 0, blaster.barrelWidth * 0.35, 0, TAU);
+      ctx.fill();
+      ctx.restore();
     }
 
     ctx.restore();

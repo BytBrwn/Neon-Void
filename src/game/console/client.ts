@@ -34,6 +34,10 @@ export function configureGameConsole(options: { url?: string; enabled?: boolean 
   if (options.enabled !== undefined) enabled = options.enabled;
 }
 
+export function isGameConsoleEnabled(): boolean {
+  return enabled;
+}
+
 export function gameConsole(
   level: GameConsoleLevel,
   event: string,

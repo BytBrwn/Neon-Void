@@ -1,7 +1,6 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef } from "react";
 
 type Fragment = {
-  id: number;
   x: number;
   y: number;
   vx: number;
@@ -12,6 +11,7 @@ type Fragment = {
   maxLife: number;
   size: number;
   hue: number;
+  el: HTMLSpanElement;
 };
 
 type HealthBarProps = {
@@ -23,28 +23,43 @@ function rand(min: number, max: number): number {
   return min + Math.random() * (max - min);
 }
 
+function paintFill(fill: HTMLDivElement, ratio: number): void {
+  const hue = 120 * ratio;
+  fill.style.width = `${ratio * 100}%`;
+  fill.style.background = `linear-gradient(90deg, hsl(${hue}, 90%, 52%), hsl(${hue + 40}, 85%, 58%))`;
+  fill.style.boxShadow = `0 0 14px hsla(${hue}, 90%, 55%, 0.5)`;
+}
+
 export const HealthBar: React.FC<HealthBarProps> = ({ health, maxHealth }) => {
   const barRef = useRef<HTMLDivElement>(null);
+  const fillRef = useRef<HTMLDivElement>(null);
+  const ghostRef = useRef<HTMLDivElement>(null);
+  const fragmentLayerRef = useRef<HTMLDivElement>(null);
   const prevHealthRef = useRef(health);
   const healthRef = useRef(health);
   const maxHealthRef = useRef(maxHealth);
   const displayRef = useRef(health / maxHealth);
-  const idRef = useRef(0);
-  const [displayRatio, setDisplayRatio] = useState(health / maxHealth);
-  const [fragments, setFragments] = useState<Fragment[]>([]);
+  const fragmentsRef = useRef<Fragment[]>([]);
 
   healthRef.current = health;
   maxHealthRef.current = maxHealth;
 
   useEffect(() => {
-    displayRef.current = healthRef.current / maxHealth;
-    setDisplayRatio(displayRef.current);
+    const fill = fillRef.current;
+    if (!fill) return;
+    displayRef.current = healthRef.current / maxHealthRef.current;
+    paintFill(fill, displayRef.current);
+    const ghost = ghostRef.current;
+    if (ghost) {
+      ghost.style.width = `${Math.min(1, displayRef.current + 0.04) * 100}%`;
+    }
   }, [maxHealth]);
 
   useEffect(() => {
     const prev = prevHealthRef.current;
     const bar = barRef.current;
-    if (health < prev - 0.5 && bar) {
+    const layer = fragmentLayerRef.current;
+    if (health < prev - 0.5 && bar && layer) {
       const barWidth = bar.clientWidth;
       const oldRatio = prev / maxHealth;
       const newRatio = health / maxHealth;
@@ -54,11 +69,12 @@ export const HealthBar: React.FC<HealthBarProps> = ({ health, maxHealth }) => {
       const damage = prev - health;
       const count = Math.min(16, Math.max(4, Math.floor(damage / 3)));
       const hue = 120 * (health / maxHealth);
-      const spawned: Fragment[] = [];
 
       for (let i = 0; i < count; i += 1) {
-        spawned.push({
-          id: idRef.current++,
+        const el = document.createElement("span");
+        el.className = "neon-game__health-fragment";
+        layer.appendChild(el);
+        fragmentsRef.current.push({
           x: lostStart + Math.random() * span,
           y: rand(-2, 4),
           vx: rand(30, 140),
@@ -69,9 +85,9 @@ export const HealthBar: React.FC<HealthBarProps> = ({ health, maxHealth }) => {
           maxLife: 0.95,
           size: rand(3, 8),
           hue,
+          el,
         });
       }
-      setFragments((current) => [...current, ...spawned]);
     }
     prevHealthRef.current = health;
   }, [health, maxHealth]);
@@ -79,38 +95,61 @@ export const HealthBar: React.FC<HealthBarProps> = ({ health, maxHealth }) => {
   useEffect(() => {
     let frame = 0;
     let last = performance.now();
+    let running = true;
 
     const tick = (now: number): void => {
+      if (!running) return;
       const dt = Math.min(0.033, (now - last) / 1000);
       last = now;
 
       const target = healthRef.current / maxHealthRef.current;
       const next = displayRef.current + (target - displayRef.current) * Math.min(1, dt * 12);
       displayRef.current = Math.abs(target - next) < 0.001 ? target : next;
-      setDisplayRatio(displayRef.current);
 
-      setFragments((current) =>
-        current
-          .map((fragment) => ({
-            ...fragment,
-            x: fragment.x + fragment.vx * dt,
-            y: fragment.y + fragment.vy * dt,
-            vy: fragment.vy + 220 * dt,
-            vx: fragment.vx * 0.985,
-            rot: fragment.rot + fragment.vr * dt,
-            life: fragment.life - dt,
-          }))
-          .filter((fragment) => fragment.life > 0),
-      );
+      const fill = fillRef.current;
+      const ghost = ghostRef.current;
+      if (fill) paintFill(fill, displayRef.current);
+      if (ghost) ghost.style.width = `${Math.min(1, displayRef.current + 0.04) * 100}%`;
+
+      const frags = fragmentsRef.current;
+      let write = 0;
+      for (let i = 0; i < frags.length; i += 1) {
+        const fragment = frags[i];
+        fragment.x += fragment.vx * dt;
+        fragment.y += fragment.vy * dt;
+        fragment.vy += 220 * dt;
+        fragment.vx *= 0.985;
+        fragment.rot += fragment.vr * dt;
+        fragment.life -= dt;
+        if (fragment.life > 0) {
+          const alpha = fragment.life / fragment.maxLife;
+          fragment.el.style.left = `${fragment.x}px`;
+          fragment.el.style.top = `${fragment.y}px`;
+          fragment.el.style.width = `${fragment.size}px`;
+          fragment.el.style.height = `${fragment.size}px`;
+          fragment.el.style.opacity = `${alpha}`;
+          fragment.el.style.transform = `rotate(${fragment.rot}deg)`;
+          fragment.el.style.background = `hsl(${fragment.hue + 20}, 92%, ${52 + alpha * 18}%)`;
+          fragment.el.style.boxShadow = `0 0 6px hsla(${fragment.hue}, 90%, 60%, ${alpha})`;
+          if (write !== i) frags[write] = fragment;
+          write += 1;
+        } else {
+          fragment.el.remove();
+        }
+      }
+      frags.length = write;
 
       frame = requestAnimationFrame(tick);
     };
 
     frame = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(frame);
+    return () => {
+      running = false;
+      cancelAnimationFrame(frame);
+      for (const fragment of fragmentsRef.current) fragment.el.remove();
+      fragmentsRef.current = [];
+    };
   }, []);
-
-  const fillHue = 120 * displayRatio;
 
   return (
     <div className="neon-game__health-dock">
@@ -121,35 +160,14 @@ export const HealthBar: React.FC<HealthBarProps> = ({ health, maxHealth }) => {
         </span>
       </div>
       <div className="neon-game__health-track" ref={barRef}>
-        <div
-          className="neon-game__health-fill"
-          style={{
-            width: `${displayRatio * 100}%`,
-            background: `linear-gradient(90deg, hsl(${fillHue}, 90%, 52%), hsl(${fillHue + 40}, 85%, 58%))`,
-            boxShadow: `0 0 14px hsla(${fillHue}, 90%, 55%, 0.5)`,
-          }}
-        />
+        <div className="neon-game__health-fill" ref={fillRef} />
         <div
           className="neon-game__health-fill neon-game__health-fill--ghost"
-          style={{ width: `${Math.min(1, displayRatio + 0.04) * 100}%`, opacity: 0.25 }}
+          ref={ghostRef}
+          style={{ opacity: 0.25 }}
           aria-hidden
         />
-        {fragments.map((fragment) => (
-          <span
-            key={fragment.id}
-            className="neon-game__health-fragment"
-            style={{
-              left: `${fragment.x}px`,
-              top: `${fragment.y}px`,
-              width: `${fragment.size}px`,
-              height: `${fragment.size}px`,
-              opacity: fragment.life / fragment.maxLife,
-              transform: `rotate(${fragment.rot}deg)`,
-              background: `hsl(${fragment.hue + 20}, 92%, ${52 + (fragment.life / fragment.maxLife) * 18}%)`,
-              boxShadow: `0 0 6px hsla(${fragment.hue}, 90%, 60%, ${fragment.life / fragment.maxLife})`,
-            }}
-          />
-        ))}
+        <div ref={fragmentLayerRef} className="neon-game__health-fragments" aria-hidden />
       </div>
     </div>
   );

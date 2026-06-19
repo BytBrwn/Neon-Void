@@ -8,12 +8,9 @@ export function powerupHue(kind: PowerupKind): number {
 
 export function rollPowerupKind(bonus = false): PowerupKind {
   const roll = Math.random();
-  if (bonus || roll < 0.06) return "mega";
-  if (roll < 0.28) return "rapid";
-  if (roll < 0.48) return "spread";
-  if (roll < 0.66) return "pierce";
-  if (roll < 0.82) return "damage";
-  return "heal";
+  if (bonus || roll < 0.08) return "mega";
+  if (roll < 0.45) return "heal";
+  return "rapid";
 }
 
 export function powerupDropChance(kind: EnemyKind): number {
@@ -37,28 +34,19 @@ export function createPowerupDrop(x: number, y: number, enemy: Enemy): Powerup |
 }
 
 export function applyPowerup(player: Player, kind: PowerupKind): void {
-  const w = player.weapon;
   switch (kind) {
-    case "rapid":
-      w.fireRate = clamp(w.fireRate + 1, 0, 4);
-      break;
-    case "spread":
-      w.spread = clamp(w.spread + 1, 0, 3);
-      break;
-    case "pierce":
-      w.pierce = clamp(w.pierce + 1, 0, 3);
-      break;
-    case "damage":
-      w.damage = clamp(w.damage + 1, 0, 4);
-      break;
     case "heal":
       player.health = clamp(player.health + 28, 0, player.maxHealth);
       break;
+    case "rapid":
+    case "spread":
+    case "pierce":
+    case "damage":
+      player.overdrive = clamp(player.overdrive + 5, 0, 12);
+      break;
     case "mega":
-      w.fireRate = clamp(w.fireRate + 1, 0, 4);
-      w.spread = clamp(w.spread + 1, 0, 3);
-      w.pierce = clamp(w.pierce + 1, 0, 3);
-      w.damage = clamp(w.damage + 1, 0, 4);
+      player.overdrive = clamp(player.overdrive + 9, 0, 14);
+      player.health = clamp(player.health + 14, 0, player.maxHealth);
       break;
   }
 }
@@ -69,8 +57,10 @@ export function tickPowerups(
   dt: number,
   height: number,
   onCollect: (powerup: Powerup) => void,
-): Powerup[] {
-  return powerups.filter((powerup) => {
+): void {
+  let write = 0;
+  for (let read = 0; read < powerups.length; read += 1) {
+    const powerup = powerups[read];
     powerup.pulse += dt * 4;
     powerup.life -= dt;
     powerup.y += powerup.vy * dt;
@@ -81,11 +71,13 @@ export function tickPowerups(
       powerup.x += (dx / d) * 220 * dt;
       powerup.y += (dy / d) * 220 * dt;
     }
-    if (powerup.life <= 0 || powerup.y > height + 40) return false;
+    if (powerup.life <= 0 || powerup.y > height + 40) continue;
     if (dist(powerup, player) < powerup.radius + player.radius) {
       onCollect(powerup);
-      return false;
+      continue;
     }
-    return true;
-  });
+    if (write !== read) powerups[write] = powerup;
+    write += 1;
+  }
+  powerups.length = write;
 }

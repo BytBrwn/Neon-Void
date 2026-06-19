@@ -3,7 +3,7 @@ import { DebugPanel } from "./DebugPanel.js";
 import { HealthBar } from "./HealthBar.js";
 import { DEBUG_TOOLS_ENABLED } from "./debug.js";
 import { NeonEngine } from "./engine.js";
-import type { GameSnapshot, InputState, ShopItemId, ShipSkinId } from "./types.js";
+import type { BlasterId, GameSnapshot, InputState, ShopSupportId, ShipSkinId } from "./types.js";
 import { getShipSkinPreviewUrl } from "./shipSkins.js";
 
 const defaultInput: InputState = {
@@ -12,6 +12,29 @@ const defaultInput: InputState = {
   mouseY: 0,
   mouseDown: false,
 };
+
+function hudChanged(prev: GameSnapshot, next: GameSnapshot): boolean {
+  return (
+    prev.phase !== next.phase
+    || prev.score !== next.score
+    || prev.wave !== next.wave
+    || prev.combo !== next.combo
+    || prev.health !== next.health
+    || prev.maxHealth !== next.maxHealth
+    || prev.highScore !== next.highScore
+    || prev.waveTotal !== next.waveTotal
+    || prev.waveLeft !== next.waveLeft
+    || prev.blasterLabel !== next.blasterLabel
+    || prev.waveBanner !== next.waveBanner
+    || prev.credits !== next.credits
+    || prev.inSandbox !== next.inSandbox
+    || prev.roundFrozen !== next.roundFrozen
+    || prev.sandboxInvincible !== next.sandboxInvincible
+    || prev.shopBlasters !== next.shopBlasters
+    || prev.shopOffers !== next.shopOffers
+    || prev.shopSkins !== next.shopSkins
+  );
+}
 
 export const NeonGame: React.FC = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -30,9 +53,10 @@ export const NeonGame: React.FC = () => {
     highScore: 0,
     waveTotal: 0,
     waveLeft: 0,
-    weaponLabel: "STANDARD",
+    blasterLabel: "PULSE BOLT",
     waveBanner: "",
     credits: 0,
+    shopBlasters: [],
     shopOffers: [],
     shopSkins: [],
     inSandbox: false,
@@ -40,13 +64,21 @@ export const NeonGame: React.FC = () => {
     sandboxInvincible: true,
   }));
 
-  const [shopTab, setShopTab] = useState<"upgrades" | "skins">("upgrades");
+  const [shopTab, setShopTab] = useState<"blasters" | "support" | "skins">("blasters");
+  const hudCacheRef = useRef<GameSnapshot | null>(null);
+
+  const applyHud = useCallback((snap: GameSnapshot) => {
+    const prev = hudCacheRef.current;
+    if (prev && !hudChanged(prev, snap)) return;
+    hudCacheRef.current = snap;
+    setHud(snap);
+  }, []);
 
   const syncHud = useCallback(() => {
     if (engineRef.current) {
-      setHud(engineRef.current.snapshot());
+      applyHud(engineRef.current.snapshot());
     }
-  }, []);
+  }, [applyHud]);
 
   const togglePause = useCallback(() => {
     engineRef.current?.togglePause();
@@ -58,9 +90,16 @@ export const NeonGame: React.FC = () => {
     syncHud();
   }, [syncHud]);
 
-  const buyShopItem = useCallback((id: ShopItemId) => {
+  const buyShopSupport = useCallback((id: ShopSupportId) => {
     const engine = engineRef.current;
-    if (engine?.buyShopItem(id)) {
+    if (engine?.buyShopSupport(id)) {
+      syncHud();
+    }
+  }, [syncHud]);
+
+  const buyOrEquipBlaster = useCallback((id: BlasterId) => {
+    const engine = engineRef.current;
+    if (engine?.buyOrEquipBlaster(id)) {
       syncHud();
     }
   }, [syncHud]);
@@ -119,7 +158,7 @@ export const NeonGame: React.FC = () => {
       canvas.style.height = `${height}px`;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       engine.resize(width, height);
-      setHud(engine.snapshot());
+      applyHud(engine.snapshot());
     };
 
     resize();
@@ -133,8 +172,8 @@ export const NeonGame: React.FC = () => {
       engine.update(dt, inputRef.current);
       engine.draw(ctx);
 
-      if (Math.floor(now / 120) % 2 === 0) {
-        setHud(engine.snapshot());
+      if (Math.floor(now / 250) % 2 === 0) {
+        applyHud(engine.snapshot());
       }
 
       frameRef.current = requestAnimationFrame(loop);
@@ -145,8 +184,10 @@ export const NeonGame: React.FC = () => {
     return () => {
       window.removeEventListener("resize", resize);
       cancelAnimationFrame(frameRef.current);
+      engine.destroy();
+      engineRef.current = null;
     };
-  }, []);
+  }, [applyHud]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
@@ -156,7 +197,7 @@ export const NeonGame: React.FC = () => {
         const engine = engineRef.current;
         if (engine && (engine.phase === "playing" || engine.phase === "paused" || engine.phase === "sandbox")) {
           engine.togglePause();
-          setHud(engine.snapshot());
+          applyHud(engine.snapshot());
         }
         return;
       }
@@ -167,7 +208,7 @@ export const NeonGame: React.FC = () => {
         const engine = engineRef.current;
         if (engine && (engine.phase === "menu" || engine.phase === "dead")) {
           engine.start();
-          setHud(engine.snapshot());
+          applyHud(engine.snapshot());
         }
       }
     };
@@ -182,7 +223,7 @@ export const NeonGame: React.FC = () => {
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
     };
-  }, []);
+  }, [applyHud]);
 
   const syncMouse = (event: React.MouseEvent<HTMLCanvasElement>): void => {
     const canvas = canvasRef.current;
@@ -243,7 +284,7 @@ export const NeonGame: React.FC = () => {
           )}
         </div>
         {(showRunChrome || hud.phase === "shop") && (
-          <p className="neon-game__weapon">{hud.weaponLabel}</p>
+          <p className="neon-game__weapon">{hud.blasterLabel}</p>
         )}
       </div>
       )}
@@ -268,7 +309,7 @@ export const NeonGame: React.FC = () => {
           <p className="neon-game__eyebrow">Catalyx Arcade</p>
           <h1 className="neon-game__title">NEON VOID</h1>
           <p className="neon-game__subtitle">
-            WASD to drift · Earn credits · Shop every 5 waves · Boss every 10 waves
+            WASD to drift · Start with Pulse Bolt · Unlock blasters in the shop
           </p>
           <button className="neon-game__btn" type="button" onClick={startGame}>
             Launch
@@ -291,10 +332,17 @@ export const NeonGame: React.FC = () => {
           <div className="neon-game__shop-tabs">
             <button
               type="button"
-              className={`neon-game__shop-tab${shopTab === "upgrades" ? " neon-game__shop-tab--active" : ""}`}
-              onClick={() => setShopTab("upgrades")}
+              className={`neon-game__shop-tab${shopTab === "blasters" ? " neon-game__shop-tab--active" : ""}`}
+              onClick={() => setShopTab("blasters")}
             >
-              Upgrades
+              Blasters
+            </button>
+            <button
+              type="button"
+              className={`neon-game__shop-tab${shopTab === "support" ? " neon-game__shop-tab--active" : ""}`}
+              onClick={() => setShopTab("support")}
+            >
+              Support
             </button>
             <button
               type="button"
@@ -304,7 +352,34 @@ export const NeonGame: React.FC = () => {
               Skins
             </button>
           </div>
-          {shopTab === "upgrades" && (
+          {shopTab === "blasters" && (
+            <div className="neon-game__shop-grid">
+              {hud.shopBlasters.map((blaster) => {
+                const disabled = blaster.equipped || (!blaster.owned && hud.credits < blaster.cost);
+                const costLabel = blaster.equipped
+                  ? "Equipped"
+                  : blaster.owned
+                    ? "Equip"
+                    : blaster.cost === 0
+                      ? "Starter"
+                      : `${blaster.cost} CR`;
+                return (
+                  <button
+                    key={blaster.id}
+                    className={`neon-game__shop-item${blaster.equipped ? " neon-game__shop-item--equipped" : ""}${disabled ? " neon-game__shop-item--disabled" : ""}`}
+                    type="button"
+                    disabled={disabled}
+                    onClick={() => buyOrEquipBlaster(blaster.id)}
+                  >
+                    <span className="neon-game__shop-item-name">{blaster.label}</span>
+                    <span className="neon-game__shop-item-detail">{blaster.detail}</span>
+                    <span className="neon-game__shop-item-cost">{costLabel}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+          {shopTab === "support" && (
             <div className="neon-game__shop-grid">
               {hud.shopOffers.map((offer) => {
                 const disabled = offer.soldOut || hud.credits < offer.cost;
@@ -314,7 +389,7 @@ export const NeonGame: React.FC = () => {
                     className={`neon-game__shop-item${disabled ? " neon-game__shop-item--disabled" : ""}`}
                     type="button"
                     disabled={disabled}
-                    onClick={() => buyShopItem(offer.id)}
+                    onClick={() => buyShopSupport(offer.id)}
                   >
                     <span className="neon-game__shop-item-name">{offer.label}</span>
                     <span className="neon-game__shop-item-detail">{offer.detail}</span>

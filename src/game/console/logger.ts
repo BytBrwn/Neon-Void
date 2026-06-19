@@ -1,5 +1,5 @@
-import type { EnemyKind, GamePhase, PowerupKind, ShopItemId, ShipSkinId } from "../types.js";
-import { gameConsole, gameConsoleMemory, type GameConsoleLevel } from "./client.js";
+import type { EnemyKind, GamePhase, PowerupKind, ShopSupportId, ShipSkinId } from "../types.js";
+import { gameConsole, gameConsoleMemory, isGameConsoleEnabled, type GameConsoleLevel } from "./client.js";
 
 export type GameLogCategory =
   | "lifecycle"
@@ -35,7 +35,7 @@ export class GameLogger {
     private getContext: () => GameLogContext,
     options: GameLoggerOptions = {},
   ) {
-    this.combatDedupeMs = options.combatDedupeMs ?? 0;
+    this.combatDedupeMs = options.combatDedupeMs ?? 120;
   }
 
   private emit(
@@ -44,6 +44,7 @@ export class GameLogger {
     event: string,
     data?: Record<string, unknown>,
   ): void {
+    if (!isGameConsoleEnabled()) return;
     gameConsole(level, event, {
       category,
       ...this.getContext(),
@@ -56,12 +57,19 @@ export class GameLogger {
     data: Record<string, unknown>,
     level: GameConsoleLevel = "info",
   ): void {
+    if (!isGameConsoleEnabled()) return;
     if (this.combatDedupeMs > 0) {
       const key = `${event}:${JSON.stringify(data)}`;
       const now = Date.now();
       const last = this.lastCombat.get(key) ?? 0;
       if (now - last < this.combatDedupeMs) return;
       this.lastCombat.set(key, now);
+      if (this.lastCombat.size > 256) {
+        const cutoff = now - this.combatDedupeMs * 4;
+        for (const [dedupeKey, ts] of this.lastCombat) {
+          if (ts < cutoff) this.lastCombat.delete(dedupeKey);
+        }
+      }
     }
     this.emit("combat", level, event, data);
   }
@@ -168,7 +176,7 @@ export class GameLogger {
     this.emit("shop", "info", "shop_close");
   }
 
-  shopPurchase(id: ShopItemId, cost: number, creditsLeft: number): void {
+  shopPurchase(id: ShopSupportId, cost: number, creditsLeft: number): void {
     this.emit("shop", "info", "shop_purchase", { id, cost, creditsLeft });
   }
 
@@ -211,6 +219,7 @@ export class GameLogger {
   }
 
   memoryTick(): void {
+    if (!isGameConsoleEnabled()) return;
     gameConsoleMemory("tick");
   }
 
