@@ -1,10 +1,17 @@
-export type PanelId = "hero" | "features" | "about" | "showcase" | "contact";
+export type PanelId =
+  | "hero"
+  | "features"
+  | "about"
+  | "showcase"
+  | "play"
+  | "contact";
 
 export const navLinks: ReadonlyArray<{ id: PanelId; label: string }> = [
   { id: "hero", label: "Home" },
   { id: "features", label: "Features" },
   { id: "about", label: "About" },
   { id: "showcase", label: "Showcase" },
+  { id: "play", label: "Play" },
   { id: "contact", label: "Contact" },
 ];
 

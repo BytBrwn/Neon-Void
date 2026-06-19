@@ -8,12 +8,14 @@ import {
   testimonials,
   type PanelId,
 } from "./content.js";
+import { MemoryGame } from "./MemoryGame.js";
 
 const panelOrder: PanelId[] = [
   "hero",
   "features",
   "about",
   "showcase",
+  "play",
   "contact",
 ];
 
@@ -128,9 +130,9 @@ export const SitePage: React.FC = () => {
                     <button
                       className="btn btn--ghost"
                       type="button"
-                      onClick={() => goToPanel("contact")}
+                      onClick={() => goToPanel("play")}
                     >
-                      Contact Us
+                      Play Game
                     </button>
                   </div>
                 </div>
@@ -230,6 +232,8 @@ export const SitePage: React.FC = () => {
                 </div>
               </div>
             )}
+
+            {activePanel === "play" && <MemoryGame />}
 
             {activePanel === "contact" && (
               <div className="panel-layout panel-layout--contact contact-grid">
