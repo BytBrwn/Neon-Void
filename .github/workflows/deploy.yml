@@ -37,7 +37,6 @@ jobs:
       - name: Prepare GitHub Pages output
         working-directory: game
         run: |
-          test -f dist/index.html || cp dist/standalone.html dist/index.html
           echo "mayphex.com" > dist/CNAME
 
       - name: Deploy to gh-pages

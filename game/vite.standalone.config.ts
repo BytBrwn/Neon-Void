@@ -9,7 +9,7 @@ export default defineConfig({
   },
   build: {
     rollupOptions: {
-      input: ["./index.html", "./standalone.html"],
+      input: ["./index.html"],
     },
   },
 });
