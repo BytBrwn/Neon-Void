@@ -673,8 +673,8 @@ body {
   );
   background-size: 200% auto;
   animation:
-    ai-shimmer 3s linear infinite,
-    ai-border-pulse 2s ease-in-out infinite;
+    ai-shimmer 5s linear infinite,
+    ai-border-pulse 3.5s ease-in-out infinite;
   color: #e8d8ff;
   letter-spacing: 0.18em;
 }
@@ -690,14 +690,14 @@ body {
     transparent 70%
   );
   background-size: 200% auto;
-  animation: ai-shimmer 2.2s linear infinite;
+  animation: ai-shimmer 4s linear infinite;
   border-radius: inherit;
   pointer-events: none;
 }
 
 .neon-game__btn--ai:hover {
   transform: translateY(-2px) scale(1.04);
-  animation-duration: 1.5s, 1s;
+  animation-duration: 2.5s, 1.8s;
   color: #fff;
   border-color: rgba(200, 120, 255, 0.9);
 }
