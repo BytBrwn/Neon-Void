@@ -1,10 +1,20 @@
-html, body {
-    margin: 0;
+html,
+body {
+  margin: 0;
 }
 
-.radix-themes:where([data-is-root-theme='true']) {
-    min-height: 0;
-    @supports(min-height: 100dvh) {
-        min-height: 0;
-    }
+.welcome-screen {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  background-color: #000;
+}
+
+.welcome-text {
+  margin: 0;
+  color: #fff;
+  font-family: system-ui, sans-serif;
+  font-size: 2rem;
+  font-weight: 500;
 }
