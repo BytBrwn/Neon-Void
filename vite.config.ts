@@ -10,23 +10,24 @@ export default defineConfig(({ mode }) => {
   }
 
   return {
-  plugins: [react(), widgetManifestPlugin()],
-  base:
-    process.env.NODE_ENV === "development"
-      ? process.env.DEV_SERVER_BASE_PATH
-      : undefined,
-  server: {
-    port: Number(process.env.DEV_SERVER_PORT ?? 8080),
-    host: process.env.DEV_SERVER_HOST,
-    cors: true,
-    allowedHosts: process.env.DEV_SERVER_DOMAIN != null
-        ? [process.env.DEV_SERVER_DOMAIN]
+    plugins: [react(), widgetManifestPlugin()],
+    base:
+      process.env.NODE_ENV === "development"
+        ? process.env.DEV_SERVER_BASE_PATH
         : undefined,
-  },
-  build: {
-    rollupOptions: {
-      input: ["./index.html"],
+    server: {
+      port: Number(process.env.DEV_SERVER_PORT ?? 8080),
+      host: process.env.DEV_SERVER_HOST,
+      cors: true,
+      allowedHosts:
+        process.env.DEV_SERVER_DOMAIN != null
+          ? [process.env.DEV_SERVER_DOMAIN]
+          : undefined,
     },
-  },
-};
+    build: {
+      rollupOptions: {
+        input: ["./index.html"],
+      },
+    },
+  };
 });
