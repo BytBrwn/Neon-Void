@@ -4,7 +4,7 @@ import { HealthBar } from "./HealthBar.js";
 import { DEBUG_TOOLS_ENABLED } from "./debug.js";
 import { NeonEngine } from "./engine.js";
 import type { BlasterId, GameSnapshot, InputState, ShopSupportId, ShipSkinId } from "./types.js";
-import { getShipSkinPreviewUrl } from "./shipSkins.js";
+import { getShipSkinPreviewUrl, getShipSkinSpec } from "./shipSkins.js";
 
 const defaultInput: InputState = {
   keys: new Set<string>(),
@@ -13,9 +13,21 @@ const defaultInput: InputState = {
   mouseDown: false,
 };
 
-const JOYSTICK_DEAD_ZONE = 12;
-const JOYSTICK_MAX_RADIUS = 56;
-const JOYSTICK_RING_RADIUS = 44;
+type InputMode = "touch" | "mouse";
+
+const JOYSTICK_DEAD_ZONE_TOUCH = 14;
+const JOYSTICK_MAX_RADIUS_TOUCH = 52;
+const JOYSTICK_RING_RADIUS = 52;
+const JOYSTICK_DOT_RADIUS = 16;
+const AIM_SMOOTHING = 0.65;
+const FIRE_GRACE_MS = 80;
+const MOBILE_SHAKE_SCALE = 0.5;
+const DESKTOP_AIM_LINE_LENGTH = 80;
+
+function isTouchDevice(): boolean {
+  return typeof window !== "undefined"
+    && ("ontouchstart" in window || navigator.maxTouchPoints > 0);
+}
 
 type CanvasPoint = { x: number; y: number; width: number; height: number };
 
@@ -30,6 +42,19 @@ type JoystickVisual = {
   originY: number;
   stickX: number;
   stickY: number;
+  active: boolean;
+};
+
+type TouchAimState = {
+  x: number;
+  y: number;
+  targetX: number;
+  targetY: number;
+};
+
+type RightThumbVisual = {
+  x: number;
+  y: number;
   active: boolean;
 };
 
@@ -53,10 +78,11 @@ function applyJoystickToKeys(
   touchArrowKeys: Set<string>,
   dx: number,
   dy: number,
+  deadZone: number,
 ): void {
   clearTouchArrowKeys(keys, touchArrowKeys);
   const dist = Math.hypot(dx, dy);
-  if (dist < JOYSTICK_DEAD_ZONE) return;
+  if (dist < deadZone) return;
 
   const nx = dx / dist;
   const ny = dy / dist;
@@ -78,27 +104,62 @@ function applyJoystickToKeys(
   }
 }
 
-function clampJoystickDelta(dx: number, dy: number): { dx: number; dy: number } {
+function clampJoystickDelta(dx: number, dy: number, maxRadius: number): { dx: number; dy: number } {
   const dist = Math.hypot(dx, dy);
-  if (dist <= JOYSTICK_MAX_RADIUS || dist === 0) return { dx, dy };
-  const scale = JOYSTICK_MAX_RADIUS / dist;
+  if (dist <= maxRadius || dist === 0) return { dx, dy };
+  const scale = maxRadius / dist;
   return { dx: dx * scale, dy: dy * scale };
 }
 
 function drawJoystickIndicator(ctx: CanvasRenderingContext2D, joy: JoystickVisual): void {
   ctx.save();
-  ctx.strokeStyle = "rgba(180, 255, 230, 0.22)";
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.arc(joy.originX, joy.originY, JOYSTICK_RING_RADIUS, 0, Math.PI * 2);
-  ctx.stroke();
-
-  ctx.fillStyle = "rgba(0, 255, 220, 0.38)";
-  ctx.strokeStyle = "rgba(180, 255, 240, 0.55)";
+  ctx.fillStyle = "hsla(200, 80%, 60%, 0.18)";
+  ctx.strokeStyle = "hsla(200, 90%, 70%, 0.35)";
   ctx.lineWidth = 1.5;
   ctx.beginPath();
-  ctx.arc(joy.stickX, joy.stickY, 10, 0, Math.PI * 2);
+  ctx.arc(joy.originX, joy.originY, JOYSTICK_RING_RADIUS, 0, Math.PI * 2);
   ctx.fill();
+  ctx.stroke();
+
+  ctx.fillStyle = "hsla(200, 100%, 80%, 0.55)";
+  ctx.beginPath();
+  ctx.arc(joy.stickX, joy.stickY, JOYSTICK_DOT_RADIUS, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawRightThumbCrosshair(ctx: CanvasRenderingContext2D, x: number, y: number): void {
+  const size = 8;
+  ctx.save();
+  ctx.strokeStyle = "hsla(200, 90%, 70%, 0.3)";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(x - size, y);
+  ctx.lineTo(x + size, y);
+  ctx.moveTo(x, y - size);
+  ctx.lineTo(x, y + size);
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawDesktopAimLine(
+  ctx: CanvasRenderingContext2D,
+  muzzleX: number,
+  muzzleY: number,
+  aimX: number,
+  aimY: number,
+): void {
+  const dx = aimX - muzzleX;
+  const dy = aimY - muzzleY;
+  const dist = Math.hypot(dx, dy);
+  if (dist < 1) return;
+  const len = Math.min(DESKTOP_AIM_LINE_LENGTH, dist);
+  ctx.save();
+  ctx.strokeStyle = "hsla(180, 100%, 70%, 0.15)";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(muzzleX, muzzleY);
+  ctx.lineTo(muzzleX + (dx / dist) * len, muzzleY + (dy / dist) * len);
   ctx.stroke();
   ctx.restore();
 }
@@ -133,10 +194,13 @@ export const NeonGame: React.FC = () => {
   const inputRef = useRef<InputState>({ ...defaultInput, keys: new Set() });
   const frameRef = useRef<number>(0);
   const lastTimeRef = useRef<number>(0);
-  const touchEnabled = typeof window !== "undefined" && "ontouchstart" in window;
+  const inputModeRef = useRef<InputMode>(isTouchDevice() ? "touch" : "mouse");
   const leftTouchRef = useRef<LeftTouchState | null>(null);
   const rightTouchIdRef = useRef<number | null>(null);
+  const fireGraceUntilRef = useRef(0);
   const touchArrowKeysRef = useRef<Set<string>>(new Set());
+  const touchAimRef = useRef<TouchAimState>({ x: 0, y: 0, targetX: 0, targetY: 0 });
+  const rightThumbVisualRef = useRef<RightThumbVisual>({ x: 0, y: 0, active: false });
   const joystickVisualRef = useRef<JoystickVisual>({
     originX: 0,
     originY: 0,
@@ -248,7 +312,7 @@ export const NeonGame: React.FC = () => {
 
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
-    const overlayCtx = touchEnabled && overlay ? overlay.getContext("2d") : null;
+    const overlayCtx = overlay ? overlay.getContext("2d") : null;
 
     const resize = (): void => {
       const parent = canvas.parentElement;
@@ -280,13 +344,46 @@ export const NeonGame: React.FC = () => {
       const dt = Math.min(0.033, (now - lastTimeRef.current) / 1000);
       lastTimeRef.current = now;
 
+      const touchMode = inputModeRef.current === "touch";
+      const playing = engine.phase === "playing" || engine.phase === "sandbox";
+      canvas.classList.toggle("neon-game__canvas--crosshair", !touchMode && playing);
+
+      if (touchMode) {
+        const aim = touchAimRef.current;
+        aim.x += (aim.targetX - aim.x) * AIM_SMOOTHING;
+        aim.y += (aim.targetY - aim.y) * AIM_SMOOTHING;
+        inputRef.current.mouseX = aim.x;
+        inputRef.current.mouseY = aim.y;
+
+        if (playing) {
+          const firing = rightTouchIdRef.current !== null || now < fireGraceUntilRef.current;
+          inputRef.current.mouseDown = firing;
+        }
+      }
+
       engine.update(dt, inputRef.current);
+
+      if (touchMode && engine.shake > 0) {
+        engine.shake *= MOBILE_SHAKE_SCALE;
+      }
+
       engine.draw(ctx);
 
       if (overlayCtx && overlay) {
         overlayCtx.clearRect(0, 0, overlay.clientWidth, overlay.clientHeight);
-        const joy = joystickVisualRef.current;
-        if (joy.active) drawJoystickIndicator(overlayCtx, joy);
+
+        if (touchMode) {
+          const joy = joystickVisualRef.current;
+          if (joy.active) drawJoystickIndicator(overlayCtx, joy);
+          const thumb = rightThumbVisualRef.current;
+          if (thumb.active) drawRightThumbCrosshair(overlayCtx, thumb.x, thumb.y);
+        } else if (playing) {
+          const p = engine.player;
+          const spec = getShipSkinSpec(p.skin);
+          const muzzleX = p.x + Math.cos(p.aimAngle) * spec.muzzleOffset;
+          const muzzleY = p.y + Math.sin(p.aimAngle) * spec.muzzleOffset;
+          drawDesktopAimLine(overlayCtx, muzzleX, muzzleY, inputRef.current.mouseX, inputRef.current.mouseY);
+        }
       }
 
       if (Math.floor(now / 250) % 2 === 0) {
@@ -304,7 +401,7 @@ export const NeonGame: React.FC = () => {
       engine.destroy();
       engineRef.current = null;
     };
-  }, [applyHud, touchEnabled]);
+  }, [applyHud]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
@@ -343,16 +440,12 @@ export const NeonGame: React.FC = () => {
   }, [applyHud]);
 
   const syncMouse = (event: React.MouseEvent<HTMLCanvasElement>): void => {
+    inputModeRef.current = "mouse";
     const canvas = canvasRef.current;
     if (!canvas) return;
     const point = canvasPoint(canvas, event.clientX, event.clientY);
     inputRef.current.mouseX = point.x;
     inputRef.current.mouseY = point.y;
-  };
-
-  const touchGameplayActive = (): boolean => {
-    const engine = engineRef.current;
-    return !!engine && (engine.phase === "playing" || engine.phase === "sandbox");
   };
 
   const releaseLeftTouch = (): void => {
@@ -363,7 +456,8 @@ export const NeonGame: React.FC = () => {
 
   const releaseRightTouch = (): void => {
     rightTouchIdRef.current = null;
-    inputRef.current.mouseDown = false;
+    rightThumbVisualRef.current.active = false;
+    fireGraceUntilRef.current = performance.now() + FIRE_GRACE_MS;
   };
 
   const updateLeftTouch = (point: CanvasPoint): void => {
@@ -372,7 +466,7 @@ export const NeonGame: React.FC = () => {
 
     const rawDx = point.x - left.originX;
     const rawDy = point.y - left.originY;
-    const { dx, dy } = clampJoystickDelta(rawDx, rawDy);
+    const { dx, dy } = clampJoystickDelta(rawDx, rawDy, JOYSTICK_MAX_RADIUS_TOUCH);
 
     joystickVisualRef.current = {
       originX: left.originX,
@@ -381,20 +475,25 @@ export const NeonGame: React.FC = () => {
       stickY: left.originY + dy,
       active: true,
     };
-    applyJoystickToKeys(inputRef.current.keys, touchArrowKeysRef.current, dx, dy);
+    applyJoystickToKeys(
+      inputRef.current.keys,
+      touchArrowKeysRef.current,
+      dx,
+      dy,
+      JOYSTICK_DEAD_ZONE_TOUCH,
+    );
   };
 
   const updateRightTouch = (point: CanvasPoint): void => {
-    inputRef.current.mouseX = point.x;
-    inputRef.current.mouseY = point.y;
-    if (touchGameplayActive()) {
-      inputRef.current.mouseDown = true;
-    }
+    touchAimRef.current.targetX = point.x;
+    touchAimRef.current.targetY = point.y;
+    rightThumbVisualRef.current = { x: point.x, y: point.y, active: true };
+    fireGraceUntilRef.current = 0;
   };
 
   const handleTouchStart = (event: React.TouchEvent<HTMLCanvasElement>): void => {
     event.preventDefault();
-    if (!touchEnabled) return;
+    inputModeRef.current = "touch";
 
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -412,6 +511,8 @@ export const NeonGame: React.FC = () => {
         updateLeftTouch(point);
       } else if (!onLeft && rightTouchIdRef.current === null) {
         rightTouchIdRef.current = touch.identifier;
+        touchAimRef.current.x = point.x;
+        touchAimRef.current.y = point.y;
         updateRightTouch(point);
       }
     }
@@ -419,7 +520,7 @@ export const NeonGame: React.FC = () => {
 
   const handleTouchMove = (event: React.TouchEvent<HTMLCanvasElement>): void => {
     event.preventDefault();
-    if (!touchEnabled) return;
+    inputModeRef.current = "touch";
 
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -439,7 +540,6 @@ export const NeonGame: React.FC = () => {
 
   const handleTouchEnd = (event: React.TouchEvent<HTMLCanvasElement>): void => {
     event.preventDefault();
-    if (!touchEnabled) return;
 
     for (const touch of Array.from(event.changedTouches)) {
       if (leftTouchRef.current?.id === touch.identifier) {
@@ -452,6 +552,7 @@ export const NeonGame: React.FC = () => {
   };
 
   const handleMouseDown = (event: React.MouseEvent<HTMLCanvasElement>): void => {
+    inputModeRef.current = "mouse";
     syncMouse(event);
     const engine = engineRef.current;
     if (!engine || engine.phase === "menu" || engine.phase === "dead" || engine.phase === "shop") {
@@ -465,6 +566,7 @@ export const NeonGame: React.FC = () => {
   const showRunChrome = hud.phase === "playing" || hud.phase === "paused" || hud.phase === "sandbox";
   const showHealth = showRunChrome;
   const showHudStats = showRunChrome || hud.phase === "shop";
+  const touchCapable = isTouchDevice();
 
   return (
     <div className="neon-game">
@@ -475,23 +577,25 @@ export const NeonGame: React.FC = () => {
           onMouseMove={syncMouse}
           onMouseDown={handleMouseDown}
           onMouseUp={() => {
-            inputRef.current.mouseDown = false;
+            if (inputModeRef.current === "mouse") {
+              inputRef.current.mouseDown = false;
+            }
           }}
           onMouseLeave={() => {
-            inputRef.current.mouseDown = false;
+            if (inputModeRef.current === "mouse") {
+              inputRef.current.mouseDown = false;
+            }
           }}
           onTouchStart={handleTouchStart}
           onTouchMove={handleTouchMove}
           onTouchEnd={handleTouchEnd}
           onTouchCancel={handleTouchEnd}
         />
-        {touchEnabled && (
-          <canvas
-            ref={overlayRef}
-            className="neon-game__touch-overlay"
-            aria-hidden
-          />
-        )}
+        <canvas
+          ref={overlayRef}
+          className="neon-game__touch-overlay"
+          aria-hidden
+        />
       </div>
 
       {showHudStats && (
@@ -713,7 +817,7 @@ export const NeonGame: React.FC = () => {
 
       {showRunChrome && (
       <p className="neon-game__controls neon-game__chrome" aria-hidden="true">
-        {touchEnabled
+        {touchCapable
           ? "LEFT THUMB MOVE · RIGHT THUMB AIM & FIRE · PAUSE ESC / P"
           : "MOVE WASD · FIRE MOUSE / SPACE · PAUSE ESC / P"}
       </p>
