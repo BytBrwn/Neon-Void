@@ -1,8 +1,17 @@
 import type { Bullet, Enemy, Vec2 } from "../types.js";
+import { Pool } from "../core/Pool.js";
 import { GRAVITY_WELL_BASE_STRENGTH, GRAVITY_WELL_MAX_ACCEL, MAX_BULLETS } from "../constants.js";
 
+export type BulletPool = Pool<Bullet>;
+
+export function createBulletPool(): BulletPool {
+  return new Pool<Bullet>(MAX_BULLETS, (): Bullet => ({
+    x: 0, y: 0, vx: 0, vy: 0, life: 0, hue: 0, radius: 4.5, friendly: true, pierce: 0, damage: 14,
+  }));
+}
+
 export function shoot(
-  bullets: Bullet[],
+  pool: BulletPool,
   from: Vec2,
   angle: number,
   friendly: boolean,
@@ -13,22 +22,18 @@ export function shoot(
   tipOffset?: number,
   radius?: number,
 ): void {
-  if (bullets.length >= MAX_BULLETS) {
-    bullets.shift();
-  }
   const offset = tipOffset ?? (friendly ? 24 : 16);
-  bullets.push({
-    x: from.x + Math.cos(angle) * offset,
-    y: from.y + Math.sin(angle) * offset,
-    vx: Math.cos(angle) * speed,
-    vy: Math.sin(angle) * speed,
-    life: friendly ? 1.6 : 2.2,
-    hue,
-    radius: radius ?? (friendly ? 4.5 : 6),
-    friendly,
-    pierce,
-    damage,
-  });
+  const b = pool.next();
+  b.x = from.x + Math.cos(angle) * offset;
+  b.y = from.y + Math.sin(angle) * offset;
+  b.vx = Math.cos(angle) * speed;
+  b.vy = Math.sin(angle) * speed;
+  b.life = friendly ? 1.6 : 2.2;
+  b.hue = hue;
+  b.radius = radius ?? (friendly ? 4.5 : 6);
+  b.friendly = friendly;
+  b.pierce = pierce;
+  b.damage = damage;
 }
 
 export function enemyGravityRadius(enemy: Enemy): number {
@@ -54,18 +59,23 @@ export function enemyGravityStrength(enemy: Enemy): number {
   return GRAVITY_WELL_BASE_STRENGTH * massScale * kindScale;
 }
 
-export function applyBulletGravityWells(bullet: Bullet, enemies: Enemy[], dt: number): void {
-  if (!bullet.friendly || enemies.length === 0) return;
+export function applyBulletGravityWells(
+  bullet: Bullet,
+  enemies: Pool<Enemy>,
+  dt: number,
+): void {
+  if (!bullet.friendly || enemies.count === 0) return;
 
-  for (const enemy of enemies) {
+  for (let i = 0; i < enemies.count; i++) {
+    const enemy = enemies.buf[i];
     const dx = enemy.x - bullet.x;
     const dy = enemy.y - bullet.y;
     const radius = enemyGravityRadius(enemy);
     const distSq = dx * dx + dy * dy;
     if (distSq >= radius * radius || distSq < 1) continue;
 
-    const dist = Math.sqrt(distSq);
-    const proximity = 1 - dist / radius;
+    const d = Math.sqrt(distSq);
+    const proximity = 1 - d / radius;
     const falloff = 0.35 + proximity * 0.65;
     const softening = enemy.radius * 0.12;
     const accel = Math.min(
@@ -73,37 +83,33 @@ export function applyBulletGravityWells(bullet: Bullet, enemies: Enemy[], dt: nu
       (enemyGravityStrength(enemy) * falloff) / (distSq + softening * softening),
     );
 
-    bullet.vx += (dx / dist) * accel * dt;
-    bullet.vy += (dy / dist) * accel * dt;
+    bullet.vx += (dx / d) * accel * dt;
+    bullet.vy += (dy / d) * accel * dt;
   }
 }
 
 export function tickBullets(
-  bullets: Bullet[],
-  enemies: Enemy[],
+  pool: BulletPool,
+  enemies: Pool<Enemy>,
   dt: number,
   width: number,
   height: number,
   onFriendlyTrail?: (bullet: Bullet) => void,
 ): void {
-  let write = 0;
-  for (let read = 0; read < bullets.length; read += 1) {
-    const bullet = bullets[read];
+  for (let i = 0; i < pool.count; i++) {
+    const bullet = pool.buf[i];
     applyBulletGravityWells(bullet, enemies, dt);
     bullet.life -= dt;
     bullet.x += bullet.vx * dt;
     bullet.y += bullet.vy * dt;
     if (bullet.friendly && onFriendlyTrail) onFriendlyTrail(bullet);
-    if (
-      bullet.life > 0
-      && bullet.x > -40
-      && bullet.x < width + 40
-      && bullet.y > -40
-      && bullet.y < height + 40
-    ) {
-      if (write !== read) bullets[write] = bullet;
-      write += 1;
-    }
   }
-  bullets.length = write;
+  pool.compact(
+    (b) =>
+      b.life <= 0 ||
+      b.x < -40 ||
+      b.x > width + 40 ||
+      b.y < -40 ||
+      b.y > height + 40,
+  );
 }

@@ -1,5 +1,6 @@
 import type { PowerupKind, Powerup, Player, Enemy, EnemyKind } from "../types.js";
-import { clamp, dist, rand, TAU } from "../math.js";
+import { clamp, dist, rand, random } from "../math.js";
+import { TAU } from "../constants.js";
 import { powerupIconHue } from "../assets/powerupIcons.js";
 
 export function powerupHue(kind: PowerupKind): number {
@@ -7,7 +8,7 @@ export function powerupHue(kind: PowerupKind): number {
 }
 
 export function rollPowerupKind(bonus = false): PowerupKind {
-  const roll = Math.random();
+  const roll = random();
   if (bonus || roll < 0.08) return "mega";
   if (roll < 0.45) return "heal";
   return "rapid";
@@ -21,7 +22,7 @@ export function powerupDropChance(kind: EnemyKind): number {
 }
 
 export function createPowerupDrop(x: number, y: number, enemy: Enemy): Powerup | null {
-  if (Math.random() > powerupDropChance(enemy.kind)) return null;
+  if (random() > powerupDropChance(enemy.kind)) return null;
   return {
     x,
     y,
@@ -59,7 +60,7 @@ export function tickPowerups(
   onCollect: (powerup: Powerup) => void,
 ): void {
   let write = 0;
-  for (let read = 0; read < powerups.length; read += 1) {
+  for (let read = 0; read < powerups.length; read++) {
     const powerup = powerups[read];
     powerup.pulse += dt * 4;
     powerup.life -= dt;
@@ -77,7 +78,7 @@ export function tickPowerups(
       continue;
     }
     if (write !== read) powerups[write] = powerup;
-    write += 1;
+    write++;
   }
   powerups.length = write;
 }

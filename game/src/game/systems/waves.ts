@@ -1,5 +1,5 @@
 import type { EnemyKind } from "../types.js";
-import { rand } from "../math.js";
+import { rand, random } from "../math.js";
 
 export function isBossWave(wave: number): boolean {
   return wave > 0 && wave % 10 === 0;
@@ -16,7 +16,7 @@ export function randomWaveCount(wave: number): number {
 }
 
 export function pickSpawnKind(wave: number): EnemyKind {
-  const roll = Math.random();
+  const roll = random();
   if (wave % 10 === 0 && roll < 0.2) return "boss";
   if (wave >= 8 && roll < 0.1) return "sentinel";
   if (wave >= 6 && roll < 0.16) return "bomber";

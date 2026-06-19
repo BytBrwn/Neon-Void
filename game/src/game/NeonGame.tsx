@@ -5,6 +5,13 @@ import { DEBUG_TOOLS_ENABLED } from "./debug.js";
 import { NeonEngine } from "./engine.js";
 import type { BlasterId, GameSnapshot, InputState, ShopSupportId, ShipSkinId } from "./types.js";
 import { getShipSkinPreviewUrl, getShipSkinSpec } from "./shipSkins.js";
+import { useTouchControls } from "./hooks/useTouchControls.js";
+
+const AIM_SMOOTHING = 0.65;
+const MOBILE_SHAKE_SCALE = 0.5;
+const DESKTOP_AIM_LINE_LENGTH = 80;
+const JOYSTICK_RING_RADIUS = 52;
+const JOYSTICK_DOT_RADIUS = 16;
 
 const defaultInput: InputState = {
   keys: new Set<string>(),
@@ -13,105 +20,14 @@ const defaultInput: InputState = {
   mouseDown: false,
 };
 
-type InputMode = "touch" | "mouse";
-
-const JOYSTICK_DEAD_ZONE_TOUCH = 14;
-const JOYSTICK_MAX_RADIUS_TOUCH = 52;
-const JOYSTICK_RING_RADIUS = 52;
-const JOYSTICK_DOT_RADIUS = 16;
-const AIM_SMOOTHING = 0.65;
-const FIRE_GRACE_MS = 80;
-const MOBILE_SHAKE_SCALE = 0.5;
-const DESKTOP_AIM_LINE_LENGTH = 80;
-
 function isTouchDevice(): boolean {
-  return typeof window !== "undefined"
-    && ("ontouchstart" in window || navigator.maxTouchPoints > 0);
+  return typeof window !== "undefined" && ("ontouchstart" in window || navigator.maxTouchPoints > 0);
 }
 
-type CanvasPoint = { x: number; y: number; width: number; height: number };
-
-type LeftTouchState = {
-  id: number;
-  originX: number;
-  originY: number;
-};
-
-type JoystickVisual = {
-  originX: number;
-  originY: number;
-  stickX: number;
-  stickY: number;
-  active: boolean;
-};
-
-type TouchAimState = {
-  x: number;
-  y: number;
-  targetX: number;
-  targetY: number;
-};
-
-type RightThumbVisual = {
-  x: number;
-  y: number;
-  active: boolean;
-};
-
-function canvasPoint(canvas: HTMLCanvasElement, clientX: number, clientY: number): CanvasPoint {
-  const rect = canvas.getBoundingClientRect();
-  return {
-    x: clientX - rect.left,
-    y: clientY - rect.top,
-    width: rect.width,
-    height: rect.height,
-  };
-}
-
-function clearTouchArrowKeys(keys: Set<string>, touchArrowKeys: Set<string>): void {
-  for (const code of touchArrowKeys) keys.delete(code);
-  touchArrowKeys.clear();
-}
-
-function applyJoystickToKeys(
-  keys: Set<string>,
-  touchArrowKeys: Set<string>,
-  dx: number,
-  dy: number,
-  deadZone: number,
+function drawJoystickIndicator(
+  ctx: CanvasRenderingContext2D,
+  joy: { originX: number; originY: number; stickX: number; stickY: number },
 ): void {
-  clearTouchArrowKeys(keys, touchArrowKeys);
-  const dist = Math.hypot(dx, dy);
-  if (dist < deadZone) return;
-
-  const nx = dx / dist;
-  const ny = dy / dist;
-  const threshold = 0.38;
-
-  if (nx < -threshold) {
-    keys.add("ArrowLeft");
-    touchArrowKeys.add("ArrowLeft");
-  } else if (nx > threshold) {
-    keys.add("ArrowRight");
-    touchArrowKeys.add("ArrowRight");
-  }
-  if (ny < -threshold) {
-    keys.add("ArrowUp");
-    touchArrowKeys.add("ArrowUp");
-  } else if (ny > threshold) {
-    keys.add("ArrowDown");
-    touchArrowKeys.add("ArrowDown");
-  }
-}
-
-function clampJoystickDelta(dx: number, dy: number, maxRadius: number): { dx: number; dy: number } {
-  const dist = Math.hypot(dx, dy);
-  if (dist <= maxRadius || dist === 0) return { dx, dy };
-  const scale = maxRadius / dist;
-  return { dx: dx * scale, dy: dy * scale };
-}
-
-function drawJoystickIndicator(ctx: CanvasRenderingContext2D, joy: JoystickVisual): void {
   ctx.save();
   ctx.fillStyle = "hsla(200, 80%, 60%, 0.18)";
   ctx.strokeStyle = "hsla(200, 90%, 70%, 0.35)";
@@ -120,7 +36,6 @@ function drawJoystickIndicator(ctx: CanvasRenderingContext2D, joy: JoystickVisua
   ctx.arc(joy.originX, joy.originY, JOYSTICK_RING_RADIUS, 0, Math.PI * 2);
   ctx.fill();
   ctx.stroke();
-
   ctx.fillStyle = "hsla(200, 100%, 80%, 0.55)";
   ctx.beginPath();
   ctx.arc(joy.stickX, joy.stickY, JOYSTICK_DOT_RADIUS, 0, Math.PI * 2);
@@ -134,20 +49,16 @@ function drawRightThumbCrosshair(ctx: CanvasRenderingContext2D, x: number, y: nu
   ctx.strokeStyle = "hsla(200, 90%, 70%, 0.3)";
   ctx.lineWidth = 1;
   ctx.beginPath();
-  ctx.moveTo(x - size, y);
-  ctx.lineTo(x + size, y);
-  ctx.moveTo(x, y - size);
-  ctx.lineTo(x, y + size);
+  ctx.moveTo(x - size, y); ctx.lineTo(x + size, y);
+  ctx.moveTo(x, y - size); ctx.lineTo(x, y + size);
   ctx.stroke();
   ctx.restore();
 }
 
 function drawDesktopAimLine(
   ctx: CanvasRenderingContext2D,
-  muzzleX: number,
-  muzzleY: number,
-  aimX: number,
-  aimY: number,
+  muzzleX: number, muzzleY: number,
+  aimX: number, aimY: number,
 ): void {
   const dx = aimX - muzzleX;
   const dy = aimY - muzzleY;
@@ -166,24 +77,24 @@ function drawDesktopAimLine(
 
 function hudChanged(prev: GameSnapshot, next: GameSnapshot): boolean {
   return (
-    prev.phase !== next.phase
-    || prev.score !== next.score
-    || prev.wave !== next.wave
-    || prev.combo !== next.combo
-    || prev.health !== next.health
-    || prev.maxHealth !== next.maxHealth
-    || prev.highScore !== next.highScore
-    || prev.waveTotal !== next.waveTotal
-    || prev.waveLeft !== next.waveLeft
-    || prev.blasterLabel !== next.blasterLabel
-    || prev.waveBanner !== next.waveBanner
-    || prev.credits !== next.credits
-    || prev.inSandbox !== next.inSandbox
-    || prev.roundFrozen !== next.roundFrozen
-    || prev.sandboxInvincible !== next.sandboxInvincible
-    || prev.shopBlasters !== next.shopBlasters
-    || prev.shopOffers !== next.shopOffers
-    || prev.shopSkins !== next.shopSkins
+    prev.phase !== next.phase ||
+    prev.score !== next.score ||
+    prev.wave !== next.wave ||
+    prev.combo !== next.combo ||
+    prev.health !== next.health ||
+    prev.maxHealth !== next.maxHealth ||
+    prev.highScore !== next.highScore ||
+    prev.waveTotal !== next.waveTotal ||
+    prev.waveLeft !== next.waveLeft ||
+    prev.blasterLabel !== next.blasterLabel ||
+    prev.waveBanner !== next.waveBanner ||
+    prev.credits !== next.credits ||
+    prev.inSandbox !== next.inSandbox ||
+    prev.roundFrozen !== next.roundFrozen ||
+    prev.sandboxInvincible !== next.sandboxInvincible ||
+    prev.shopBlasters !== next.shopBlasters ||
+    prev.shopOffers !== next.shopOffers ||
+    prev.shopSkins !== next.shopSkins
   );
 }
 
@@ -194,44 +105,18 @@ export const NeonGame: React.FC = () => {
   const inputRef = useRef<InputState>({ ...defaultInput, keys: new Set() });
   const frameRef = useRef<number>(0);
   const lastTimeRef = useRef<number>(0);
-  const inputModeRef = useRef<InputMode>(isTouchDevice() ? "touch" : "mouse");
-  const leftTouchRef = useRef<LeftTouchState | null>(null);
-  const rightTouchIdRef = useRef<number | null>(null);
-  const fireGraceUntilRef = useRef(0);
-  const touchArrowKeysRef = useRef<Set<string>>(new Set());
-  const touchAimRef = useRef<TouchAimState>({ x: 0, y: 0, targetX: 0, targetY: 0 });
-  const rightThumbVisualRef = useRef<RightThumbVisual>({ x: 0, y: 0, active: false });
-  const joystickVisualRef = useRef<JoystickVisual>({
-    originX: 0,
-    originY: 0,
-    stickX: 0,
-    stickY: 0,
-    active: false,
-  });
+  const hudCacheRef = useRef<GameSnapshot | null>(null);
+
+  const touch = useTouchControls(inputRef, canvasRef);
 
   const [hud, setHud] = useState<GameSnapshot>(() => ({
-    phase: "menu",
-    score: 0,
-    wave: 1,
-    combo: 0,
-    health: 100,
-    maxHealth: 100,
-    highScore: 0,
-    waveTotal: 0,
-    waveLeft: 0,
-    blasterLabel: "PULSE BOLT",
-    waveBanner: "",
-    credits: 0,
-    shopBlasters: [],
-    shopOffers: [],
-    shopSkins: [],
-    inSandbox: false,
-    roundFrozen: false,
-    sandboxInvincible: true,
+    phase: "menu", score: 0, wave: 1, combo: 0, health: 100, maxHealth: 100,
+    highScore: 0, waveTotal: 0, waveLeft: 0, blasterLabel: "PULSE BOLT",
+    waveBanner: "", credits: 0, shopBlasters: [], shopOffers: [], shopSkins: [],
+    inSandbox: false, roundFrozen: false, sandboxInvincible: true,
   }));
 
   const [shopTab, setShopTab] = useState<"blasters" | "support" | "skins">("blasters");
-  const hudCacheRef = useRef<GameSnapshot | null>(null);
 
   const applyHud = useCallback((snap: GameSnapshot) => {
     const prev = hudCacheRef.current;
@@ -241,67 +126,21 @@ export const NeonGame: React.FC = () => {
   }, []);
 
   const syncHud = useCallback(() => {
-    if (engineRef.current) {
-      applyHud(engineRef.current.snapshot());
-    }
+    if (engineRef.current) applyHud(engineRef.current.snapshot());
   }, [applyHud]);
 
-  const togglePause = useCallback(() => {
-    engineRef.current?.togglePause();
-    syncHud();
-  }, [syncHud]);
+  const togglePause = useCallback(() => { engineRef.current?.togglePause(); syncHud(); }, [syncHud]);
+  const startGame = useCallback(() => { engineRef.current?.start(); syncHud(); }, [syncHud]);
+  const buyShopSupport = useCallback((id: ShopSupportId) => { if (engineRef.current?.buyShopSupport(id)) syncHud(); }, [syncHud]);
+  const buyOrEquipBlaster = useCallback((id: BlasterId) => { if (engineRef.current?.buyOrEquipBlaster(id)) syncHud(); }, [syncHud]);
+  const buyOrEquipSkin = useCallback((id: ShipSkinId) => { if (engineRef.current?.buyOrEquipSkin(id)) syncHud(); }, [syncHud]);
+  const leaveShop = useCallback(() => { engineRef.current?.leaveShop(); syncHud(); }, [syncHud]);
+  const enterSandbox = useCallback(() => { engineRef.current?.enterSandbox(); syncHud(); }, [syncHud]);
+  const leaveSandbox = useCallback(() => { engineRef.current?.exitSandbox(); syncHud(); }, [syncHud]);
+  const resetSandbox = useCallback(() => { engineRef.current?.resetSandbox(); syncHud(); }, [syncHud]);
+  const exitToMenu = useCallback(() => { engineRef.current?.exitToMenu(); syncHud(); }, [syncHud]);
 
-  const startGame = useCallback(() => {
-    engineRef.current?.start();
-    syncHud();
-  }, [syncHud]);
-
-  const buyShopSupport = useCallback((id: ShopSupportId) => {
-    const engine = engineRef.current;
-    if (engine?.buyShopSupport(id)) {
-      syncHud();
-    }
-  }, [syncHud]);
-
-  const buyOrEquipBlaster = useCallback((id: BlasterId) => {
-    const engine = engineRef.current;
-    if (engine?.buyOrEquipBlaster(id)) {
-      syncHud();
-    }
-  }, [syncHud]);
-
-  const buyOrEquipSkin = useCallback((id: ShipSkinId) => {
-    const engine = engineRef.current;
-    if (engine?.buyOrEquipSkin(id)) {
-      syncHud();
-    }
-  }, [syncHud]);
-
-  const leaveShop = useCallback(() => {
-    engineRef.current?.leaveShop();
-    syncHud();
-  }, [syncHud]);
-
-  const enterSandbox = useCallback(() => {
-    engineRef.current?.enterSandbox();
-    syncHud();
-  }, [syncHud]);
-
-  const leaveSandbox = useCallback(() => {
-    engineRef.current?.exitSandbox();
-    syncHud();
-  }, [syncHud]);
-
-  const resetSandbox = useCallback(() => {
-    engineRef.current?.resetSandbox();
-    syncHud();
-  }, [syncHud]);
-
-  const exitToMenu = useCallback(() => {
-    engineRef.current?.exitToMenu();
-    syncHud();
-  }, [syncHud]);
-
+  // Main game loop setup
   useEffect(() => {
     const canvas = canvasRef.current;
     const overlay = overlayRef.current;
@@ -344,38 +183,37 @@ export const NeonGame: React.FC = () => {
       const dt = Math.min(0.033, (now - lastTimeRef.current) / 1000);
       lastTimeRef.current = now;
 
-      const touchMode = inputModeRef.current === "touch";
+      const touchMode = touch.inputModeRef.current === "touch";
       const playing = engine.phase === "playing" || engine.phase === "sandbox";
       canvas.classList.toggle("neon-game__canvas--crosshair", !touchMode && playing);
 
+      // Smooth aim for touch mode
       if (touchMode) {
-        const aim = touchAimRef.current;
+        const aim = touch.touchAimRef.current;
         aim.x += (aim.targetX - aim.x) * AIM_SMOOTHING;
         aim.y += (aim.targetY - aim.y) * AIM_SMOOTHING;
         inputRef.current.mouseX = aim.x;
         inputRef.current.mouseY = aim.y;
-
         if (playing) {
-          const firing = rightTouchIdRef.current !== null || now < fireGraceUntilRef.current;
-          inputRef.current.mouseDown = firing;
+          inputRef.current.mouseDown =
+            touch.rightTouchIdRef.current !== null || now < touch.fireGraceUntilRef.current;
         }
       }
 
       engine.update(dt, inputRef.current);
 
-      if (touchMode && engine.shake > 0) {
-        engine.shake *= MOBILE_SHAKE_SCALE;
-      }
+      // Dampen shake on mobile
+      if (touchMode && engine.shake > 0) engine.shake *= MOBILE_SHAKE_SCALE;
 
       engine.draw(ctx);
 
+      // Draw touch/desktop overlays
       if (overlayCtx && overlay) {
         overlayCtx.clearRect(0, 0, overlay.clientWidth, overlay.clientHeight);
-
         if (touchMode) {
-          const joy = joystickVisualRef.current;
+          const joy = touch.joystickVisualRef.current;
           if (joy.active) drawJoystickIndicator(overlayCtx, joy);
-          const thumb = rightThumbVisualRef.current;
+          const thumb = touch.rightThumbVisualRef.current;
           if (thumb.active) drawRightThumbCrosshair(overlayCtx, thumb.x, thumb.y);
         } else if (playing) {
           const p = engine.player;
@@ -386,9 +224,8 @@ export const NeonGame: React.FC = () => {
         }
       }
 
-      if (Math.floor(now / 250) % 2 === 0) {
-        applyHud(engine.snapshot());
-      }
+      // Poll HUD at 4 Hz (250ms) to avoid setState on every frame
+      if (Math.floor(now / 250) % 2 === 0) applyHud(engine.snapshot());
 
       frameRef.current = requestAnimationFrame(loop);
     };
@@ -401,8 +238,9 @@ export const NeonGame: React.FC = () => {
       engine.destroy();
       engineRef.current = null;
     };
-  }, [applyHud]);
+  }, [applyHud, touch]);
 
+  // Keyboard input
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
       if (event.code === "Escape" || event.code === "KeyP") {
@@ -415,9 +253,7 @@ export const NeonGame: React.FC = () => {
         }
         return;
       }
-
       inputRef.current.keys.add(event.code);
-
       if (event.code === "Enter") {
         const engine = engineRef.current;
         if (engine && (engine.phase === "menu" || engine.phase === "dead")) {
@@ -426,11 +262,7 @@ export const NeonGame: React.FC = () => {
         }
       }
     };
-
-    const onKeyUp = (event: KeyboardEvent): void => {
-      inputRef.current.keys.delete(event.code);
-    };
-
+    const onKeyUp = (e: KeyboardEvent): void => { inputRef.current.keys.delete(e.code); };
     window.addEventListener("keydown", onKeyDown);
     window.addEventListener("keyup", onKeyUp);
     return () => {
@@ -440,124 +272,19 @@ export const NeonGame: React.FC = () => {
   }, [applyHud]);
 
   const syncMouse = (event: React.MouseEvent<HTMLCanvasElement>): void => {
-    inputModeRef.current = "mouse";
+    touch.inputModeRef.current = "mouse";
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const point = canvasPoint(canvas, event.clientX, event.clientY);
-    inputRef.current.mouseX = point.x;
-    inputRef.current.mouseY = point.y;
-  };
-
-  const releaseLeftTouch = (): void => {
-    leftTouchRef.current = null;
-    clearTouchArrowKeys(inputRef.current.keys, touchArrowKeysRef.current);
-    joystickVisualRef.current.active = false;
-  };
-
-  const releaseRightTouch = (): void => {
-    rightTouchIdRef.current = null;
-    rightThumbVisualRef.current.active = false;
-    fireGraceUntilRef.current = performance.now() + FIRE_GRACE_MS;
-  };
-
-  const updateLeftTouch = (point: CanvasPoint): void => {
-    const left = leftTouchRef.current;
-    if (!left) return;
-
-    const rawDx = point.x - left.originX;
-    const rawDy = point.y - left.originY;
-    const { dx, dy } = clampJoystickDelta(rawDx, rawDy, JOYSTICK_MAX_RADIUS_TOUCH);
-
-    joystickVisualRef.current = {
-      originX: left.originX,
-      originY: left.originY,
-      stickX: left.originX + dx,
-      stickY: left.originY + dy,
-      active: true,
-    };
-    applyJoystickToKeys(
-      inputRef.current.keys,
-      touchArrowKeysRef.current,
-      dx,
-      dy,
-      JOYSTICK_DEAD_ZONE_TOUCH,
-    );
-  };
-
-  const updateRightTouch = (point: CanvasPoint): void => {
-    touchAimRef.current.targetX = point.x;
-    touchAimRef.current.targetY = point.y;
-    rightThumbVisualRef.current = { x: point.x, y: point.y, active: true };
-    fireGraceUntilRef.current = 0;
-  };
-
-  const handleTouchStart = (event: React.TouchEvent<HTMLCanvasElement>): void => {
-    event.preventDefault();
-    inputModeRef.current = "touch";
-
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    for (const touch of Array.from(event.changedTouches)) {
-      const point = canvasPoint(canvas, touch.clientX, touch.clientY);
-      const onLeft = point.x < point.width * 0.5;
-
-      if (onLeft && !leftTouchRef.current) {
-        leftTouchRef.current = {
-          id: touch.identifier,
-          originX: point.x,
-          originY: point.y,
-        };
-        updateLeftTouch(point);
-      } else if (!onLeft && rightTouchIdRef.current === null) {
-        rightTouchIdRef.current = touch.identifier;
-        touchAimRef.current.x = point.x;
-        touchAimRef.current.y = point.y;
-        updateRightTouch(point);
-      }
-    }
-  };
-
-  const handleTouchMove = (event: React.TouchEvent<HTMLCanvasElement>): void => {
-    event.preventDefault();
-    inputModeRef.current = "touch";
-
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    for (const touch of Array.from(event.changedTouches)) {
-      const point = canvasPoint(canvas, touch.clientX, touch.clientY);
-      const left = leftTouchRef.current;
-      if (left && touch.identifier === left.id) {
-        updateLeftTouch(point);
-        continue;
-      }
-      if (touch.identifier === rightTouchIdRef.current) {
-        updateRightTouch(point);
-      }
-    }
-  };
-
-  const handleTouchEnd = (event: React.TouchEvent<HTMLCanvasElement>): void => {
-    event.preventDefault();
-
-    for (const touch of Array.from(event.changedTouches)) {
-      if (leftTouchRef.current?.id === touch.identifier) {
-        releaseLeftTouch();
-      }
-      if (rightTouchIdRef.current === touch.identifier) {
-        releaseRightTouch();
-      }
-    }
+    const rect = canvas.getBoundingClientRect();
+    inputRef.current.mouseX = event.clientX - rect.left;
+    inputRef.current.mouseY = event.clientY - rect.top;
   };
 
   const handleMouseDown = (event: React.MouseEvent<HTMLCanvasElement>): void => {
-    inputModeRef.current = "mouse";
+    touch.inputModeRef.current = "mouse";
     syncMouse(event);
     const engine = engineRef.current;
-    if (!engine || engine.phase === "menu" || engine.phase === "dead" || engine.phase === "shop") {
-      return;
-    }
+    if (!engine || engine.phase === "menu" || engine.phase === "dead" || engine.phase === "shop") return;
     if (engine.phase === "playing" || engine.phase === "sandbox") {
       inputRef.current.mouseDown = true;
     }
@@ -576,65 +303,49 @@ export const NeonGame: React.FC = () => {
           className={`neon-game__canvas${hud.phase === "menu" ? " neon-game__canvas--menu" : ""}`}
           onMouseMove={syncMouse}
           onMouseDown={handleMouseDown}
-          onMouseUp={() => {
-            if (inputModeRef.current === "mouse") {
-              inputRef.current.mouseDown = false;
-            }
-          }}
-          onMouseLeave={() => {
-            if (inputModeRef.current === "mouse") {
-              inputRef.current.mouseDown = false;
-            }
-          }}
-          onTouchStart={handleTouchStart}
-          onTouchMove={handleTouchMove}
-          onTouchEnd={handleTouchEnd}
-          onTouchCancel={handleTouchEnd}
+          onMouseUp={() => { if (touch.inputModeRef.current === "mouse") inputRef.current.mouseDown = false; }}
+          onMouseLeave={() => { if (touch.inputModeRef.current === "mouse") inputRef.current.mouseDown = false; }}
+          onTouchStart={touch.handleTouchStart}
+          onTouchMove={touch.handleTouchMove}
+          onTouchEnd={touch.handleTouchEnd}
+          onTouchCancel={touch.handleTouchEnd}
         />
-        <canvas
-          ref={overlayRef}
-          className="neon-game__touch-overlay"
-          aria-hidden
-        />
+        <canvas ref={overlayRef} className="neon-game__touch-overlay" aria-hidden />
       </div>
 
       {showHudStats && (
-      <div className="neon-game__hud neon-game__chrome">
-        {hud.inSandbox && hud.waveBanner && (
-          <p className="neon-game__wave-banner neon-game__wave-banner--top" aria-live="polite">
-            {hud.waveBanner}
-          </p>
-        )}
-        <div className="neon-game__hud-top">
-          <span>SCORE {hud.score.toLocaleString()}</span>
-          <span className="neon-game__credits">{hud.credits.toLocaleString()} CR</span>
-          <span>WAVE {hud.wave} · {hud.waveLeft}/{hud.waveTotal || "—"}</span>
-          {hud.roundFrozen && !hud.inSandbox && <span className="neon-game__sandbox-tag">FROZEN</span>}
-          <span>COMBO x{hud.combo}</span>
-          <span>HI {hud.highScore.toLocaleString()}</span>
-          {showRunChrome && (
-            <button className="neon-game__pause-btn" type="button" onClick={togglePause}>
-              {hud.phase === "paused" ? "Resume" : "Pause"}
-            </button>
+        <div className="neon-game__hud neon-game__chrome">
+          {hud.inSandbox && hud.waveBanner && (
+            <p className="neon-game__wave-banner neon-game__wave-banner--top" aria-live="polite">
+              {hud.waveBanner}
+            </p>
+          )}
+          <div className="neon-game__hud-top">
+            <span>SCORE {hud.score.toLocaleString()}</span>
+            <span className="neon-game__credits">{hud.credits.toLocaleString()} CR</span>
+            <span>WAVE {hud.wave} · {hud.waveLeft}/{hud.waveTotal || "—"}</span>
+            {hud.roundFrozen && !hud.inSandbox && <span className="neon-game__sandbox-tag">FROZEN</span>}
+            <span>COMBO x{hud.combo}</span>
+            <span>HI {hud.highScore.toLocaleString()}</span>
+            {showRunChrome && (
+              <button className="neon-game__pause-btn" type="button" onClick={togglePause}>
+                {hud.phase === "paused" ? "Resume" : "Pause"}
+              </button>
+            )}
+          </div>
+          {(showRunChrome || hud.phase === "shop") && (
+            <p className="neon-game__weapon">{hud.blasterLabel}</p>
           )}
         </div>
-        {(showRunChrome || hud.phase === "shop") && (
-          <p className="neon-game__weapon">{hud.blasterLabel}</p>
-        )}
-      </div>
       )}
 
-      {showHealth && (
-        <HealthBar health={hud.health} maxHealth={hud.maxHealth} />
-      )}
+      {showHealth && <HealthBar health={hud.health} maxHealth={hud.maxHealth} />}
 
       {hud.phase === "sandbox" && (
         <div className="neon-game__sandbox-hud neon-game__chrome">
           <div className="neon-game__sandbox-bar">
             <span>Sandbox · no waves · spawn enemies from Test panel</span>
-            <button className="neon-game__pause-btn" type="button" onClick={leaveSandbox}>
-              Exit
-            </button>
+            <button className="neon-game__pause-btn" type="button" onClick={leaveSandbox}>Exit</button>
           </div>
         </div>
       )}
@@ -646,9 +357,7 @@ export const NeonGame: React.FC = () => {
           <p className="neon-game__subtitle">
             WASD to drift · Start with Pulse Bolt · Unlock blasters in the shop
           </p>
-          <button className="neon-game__btn" type="button" onClick={startGame}>
-            Launch
-          </button>
+          <button className="neon-game__btn" type="button" onClick={startGame}>Launch</button>
           {DEBUG_TOOLS_ENABLED && (
             <button className="neon-game__btn neon-game__btn--ghost" type="button" onClick={enterSandbox}>
               Sandbox
@@ -665,45 +374,28 @@ export const NeonGame: React.FC = () => {
             {hud.credits.toLocaleString()} credits available
           </p>
           <div className="neon-game__shop-tabs">
-            <button
-              type="button"
-              className={`neon-game__shop-tab${shopTab === "blasters" ? " neon-game__shop-tab--active" : ""}`}
-              onClick={() => setShopTab("blasters")}
-            >
-              Blasters
-            </button>
-            <button
-              type="button"
-              className={`neon-game__shop-tab${shopTab === "support" ? " neon-game__shop-tab--active" : ""}`}
-              onClick={() => setShopTab("support")}
-            >
-              Support
-            </button>
-            <button
-              type="button"
-              className={`neon-game__shop-tab${shopTab === "skins" ? " neon-game__shop-tab--active" : ""}`}
-              onClick={() => setShopTab("skins")}
-            >
-              Skins
-            </button>
+            {(["blasters", "support", "skins"] as const).map((tab) => (
+              <button
+                key={tab}
+                type="button"
+                className={`neon-game__shop-tab${shopTab === tab ? " neon-game__shop-tab--active" : ""}`}
+                onClick={() => setShopTab(tab)}
+              >
+                {tab.charAt(0).toUpperCase() + tab.slice(1)}
+              </button>
+            ))}
           </div>
+
           {shopTab === "blasters" && (
             <div className="neon-game__shop-grid">
               {hud.shopBlasters.map((blaster) => {
                 const disabled = blaster.equipped || (!blaster.owned && hud.credits < blaster.cost);
-                const costLabel = blaster.equipped
-                  ? "Equipped"
-                  : blaster.owned
-                    ? "Equip"
-                    : blaster.cost === 0
-                      ? "Starter"
-                      : `${blaster.cost} CR`;
+                const costLabel = blaster.equipped ? "Equipped" : blaster.owned ? "Equip" : blaster.cost === 0 ? "Starter" : `${blaster.cost} CR`;
                 return (
                   <button
                     key={blaster.id}
                     className={`neon-game__shop-item${blaster.equipped ? " neon-game__shop-item--equipped" : ""}${disabled ? " neon-game__shop-item--disabled" : ""}`}
-                    type="button"
-                    disabled={disabled}
+                    type="button" disabled={disabled}
                     onClick={() => buyOrEquipBlaster(blaster.id)}
                   >
                     <span className="neon-game__shop-item-name">{blaster.label}</span>
@@ -714,6 +406,7 @@ export const NeonGame: React.FC = () => {
               })}
             </div>
           )}
+
           {shopTab === "support" && (
             <div className="neon-game__shop-grid">
               {hud.shopOffers.map((offer) => {
@@ -722,45 +415,31 @@ export const NeonGame: React.FC = () => {
                   <button
                     key={offer.id}
                     className={`neon-game__shop-item${disabled ? " neon-game__shop-item--disabled" : ""}`}
-                    type="button"
-                    disabled={disabled}
+                    type="button" disabled={disabled}
                     onClick={() => buyShopSupport(offer.id)}
                   >
                     <span className="neon-game__shop-item-name">{offer.label}</span>
                     <span className="neon-game__shop-item-detail">{offer.detail}</span>
-                    <span className="neon-game__shop-item-cost">
-                      {offer.soldOut ? "MAXED" : `${offer.cost} CR`}
-                    </span>
+                    <span className="neon-game__shop-item-cost">{offer.soldOut ? "MAXED" : `${offer.cost} CR`}</span>
                   </button>
                 );
               })}
             </div>
           )}
+
           {shopTab === "skins" && (
             <div className="neon-game__shop-grid neon-game__shop-grid--skins">
               {hud.shopSkins.map((skin) => {
                 const disabled = skin.equipped || (!skin.owned && hud.credits < skin.cost);
-                const costLabel = skin.equipped
-                  ? "Equipped"
-                  : skin.owned
-                    ? "Equip"
-                    : skin.cost === 0
-                      ? "Free"
-                      : `${skin.cost} CR`;
+                const costLabel = skin.equipped ? "Equipped" : skin.owned ? "Equip" : skin.cost === 0 ? "Free" : `${skin.cost} CR`;
                 return (
                   <button
                     key={skin.id}
                     className={`neon-game__shop-item neon-game__shop-item--skin${skin.equipped ? " neon-game__shop-item--equipped" : ""}${disabled ? " neon-game__shop-item--disabled" : ""}`}
-                    type="button"
-                    disabled={disabled}
+                    type="button" disabled={disabled}
                     onClick={() => buyOrEquipSkin(skin.id)}
                   >
-                    <img
-                      className="neon-game__shop-skin-preview"
-                      src={getShipSkinPreviewUrl(skin.id)}
-                      alt=""
-                      draggable={false}
-                    />
+                    <img className="neon-game__shop-skin-preview" src={getShipSkinPreviewUrl(skin.id)} alt="" draggable={false} />
                     <span className="neon-game__shop-item-name">{skin.label}</span>
                     <span className="neon-game__shop-item-detail">{skin.detail}</span>
                     <span className="neon-game__shop-item-cost">{costLabel}</span>
@@ -769,9 +448,8 @@ export const NeonGame: React.FC = () => {
               })}
             </div>
           )}
-          <button className="neon-game__btn" type="button" onClick={leaveShop}>
-            Continue
-          </button>
+
+          <button className="neon-game__btn" type="button" onClick={leaveShop}>Continue</button>
         </div>
       )}
 
@@ -787,17 +465,11 @@ export const NeonGame: React.FC = () => {
               : `Score ${hud.score.toLocaleString()} · Wave ${hud.wave} · Combo x${hud.combo}`}
           </p>
           <div className="neon-game__overlay-actions">
-            <button className="neon-game__btn" type="button" onClick={togglePause}>
-              Resume
-            </button>
+            <button className="neon-game__btn" type="button" onClick={togglePause}>Resume</button>
             {hud.inSandbox && (
-              <button className="neon-game__btn neon-game__btn--ghost" type="button" onClick={resetSandbox}>
-                Reset
-              </button>
+              <button className="neon-game__btn neon-game__btn--ghost" type="button" onClick={resetSandbox}>Reset</button>
             )}
-            <button className="neon-game__btn neon-game__btn--danger" type="button" onClick={exitToMenu}>
-              Exit to Menu
-            </button>
+            <button className="neon-game__btn neon-game__btn--danger" type="button" onClick={exitToMenu}>Exit to Menu</button>
           </div>
         </div>
       )}
@@ -809,18 +481,16 @@ export const NeonGame: React.FC = () => {
           <p className="neon-game__subtitle">
             Score {hud.score.toLocaleString()} · Wave {hud.wave} · {hud.credits.toLocaleString()} CR earned
           </p>
-          <button className="neon-game__btn" type="button" onClick={startGame}>
-            Respawn
-          </button>
+          <button className="neon-game__btn" type="button" onClick={startGame}>Respawn</button>
         </div>
       )}
 
       {showRunChrome && (
-      <p className="neon-game__controls neon-game__chrome" aria-hidden="true">
-        {touchCapable
-          ? "LEFT THUMB MOVE · RIGHT THUMB AIM & FIRE · PAUSE ESC / P"
-          : "MOVE WASD · FIRE MOUSE / SPACE · PAUSE ESC / P"}
-      </p>
+        <p className="neon-game__controls neon-game__chrome" aria-hidden="true">
+          {touchCapable
+            ? "LEFT THUMB MOVE · RIGHT THUMB AIM & FIRE · PAUSE ESC / P"
+            : "MOVE WASD · FIRE MOUSE / SPACE · PAUSE ESC / P"}
+        </p>
       )}
 
       <DebugPanel engineRef={engineRef} hud={hud} onChange={syncHud} />

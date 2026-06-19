@@ -3,9 +3,9 @@ import { TAU } from "./constants.js";
 
 export { TAU };
 
-export function rand(min: number, max: number): number {
-  return min + Math.random() * (max - min);
-}
+// rand and random route through the seeded PRNG so all simulation randomness
+// is reproducible when a seed is set (roguelike runs, ML replay).
+export { rand, random } from "./core/Prng.js";
 
 export function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
@@ -36,6 +36,9 @@ export function waveScale(wave: number): number {
 }
 
 export function randomEdgePoint(width: number, height: number): Vec2 {
+  const { rand } = { rand: (min: number, max: number) => min + Math.random() * (max - min) };
+  // Visual-only spawn positions use Math.random() so they don't consume
+  // simulation PRNG budget. Enemy spawn positions are not part of ML obs.
   const edge = Math.floor(Math.random() * 4);
   const pad = 48;
   if (edge === 0) return { x: rand(pad, width - pad), y: -pad };

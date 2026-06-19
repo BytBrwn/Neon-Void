@@ -1,80 +1,88 @@
 import type { Particle } from "../types.js";
+import { Pool } from "../core/Pool.js";
 import { MAX_PARTICLES } from "../constants.js";
-import { rand, TAU } from "../math.js";
+import { rand, random } from "../math.js";
+import { TAU } from "../constants.js";
 
-let particleWriteCursor = 0;
+export type ParticlePool = Pool<Particle>;
 
-export function pushParticle(particles: Particle[], particle: Particle): void {
-  if (particles.length < MAX_PARTICLES) {
-    particles.push(particle);
-    return;
-  }
-  particles[particleWriteCursor % MAX_PARTICLES] = particle;
-  particleWriteCursor += 1;
+export function createParticlePool(): ParticlePool {
+  return new Pool<Particle>(MAX_PARTICLES, (): Particle => ({
+    x: 0, y: 0, vx: 0, vy: 0, life: 0, maxLife: 1, hue: 0, size: 1, glow: false,
+  }));
+}
+
+export function pushParticle(
+  pool: ParticlePool,
+  x: number, y: number,
+  vx: number, vy: number,
+  life: number,
+  hue: number,
+  size: number,
+  glow: boolean,
+): void {
+  const p = pool.next();
+  p.x = x; p.y = y; p.vx = vx; p.vy = vy;
+  p.life = life; p.maxLife = life; p.hue = hue; p.size = size; p.glow = glow;
 }
 
 export function burst(
-  particles: Particle[],
+  pool: ParticlePool,
   x: number,
   y: number,
   hue: number,
   amount: number,
   speed: number,
 ): void {
-  for (let i = 0; i < amount; i += 1) {
+  for (let i = 0; i < amount; i++) {
     const angle = rand(0, TAU);
     const velocity = rand(speed * 0.25, speed);
-    pushParticle(particles, {
-      x,
-      y,
-      vx: Math.cos(angle) * velocity,
-      vy: Math.sin(angle) * velocity,
-      life: rand(0.35, 0.95),
-      maxLife: 0.95,
-      hue: hue + rand(-30, 30),
-      size: rand(1.5, 5),
-      glow: Math.random() > 0.5,
-    });
+    const p = pool.next();
+    p.x = x;
+    p.y = y;
+    p.vx = Math.cos(angle) * velocity;
+    p.vy = Math.sin(angle) * velocity;
+    p.life = rand(0.35, 0.95);
+    p.maxLife = 0.95;
+    p.hue = hue + rand(-30, 30);
+    p.size = rand(1.5, 5);
+    p.glow = random() > 0.5;
   }
 }
 
 export function shockwave(
-  particles: Particle[],
+  pool: ParticlePool,
   x: number,
   y: number,
   hue: number,
   strength = 1,
 ): void {
-  for (let i = 0; i < 28 * strength; i += 1) {
+  const count = Math.floor(28 * strength);
+  for (let i = 0; i < count; i++) {
     const angle = (i / 28) * TAU + rand(-0.08, 0.08);
     const velocity = rand(180, 340) * strength;
-    pushParticle(particles, {
-      x,
-      y,
-      vx: Math.cos(angle) * velocity,
-      vy: Math.sin(angle) * velocity,
-      life: rand(0.25, 0.55),
-      maxLife: 0.55,
-      hue: hue + rand(-15, 15),
-      size: rand(2.5, 6),
-      glow: true,
-    });
+    const p = pool.next();
+    p.x = x;
+    p.y = y;
+    p.vx = Math.cos(angle) * velocity;
+    p.vy = Math.sin(angle) * velocity;
+    p.life = rand(0.25, 0.55);
+    p.maxLife = 0.55;
+    p.hue = hue + rand(-15, 15);
+    p.size = rand(2.5, 6);
+    p.glow = true;
   }
 }
 
-export function tickParticles(particles: Particle[], dt: number): void {
-  let write = 0;
-  for (let read = 0; read < particles.length; read += 1) {
-    const p = particles[read];
+export function tickParticles(pool: ParticlePool, dt: number): void {
+  const drag = 0.985;
+  for (let r = 0; r < pool.count; r++) {
+    const p = pool.buf[r];
     p.life -= dt;
     p.x += p.vx * dt;
     p.y += p.vy * dt;
-    p.vx *= 0.985;
-    p.vy *= 0.985;
-    if (p.life > 0) {
-      if (write !== read) particles[write] = p;
-      write += 1;
-    }
+    p.vx *= drag;
+    p.vy *= drag;
   }
-  particles.length = write;
+  pool.compact((p) => p.life <= 0);
 }
