@@ -2,11 +2,10 @@
   <img src="./game/public/apple-touch-icon.png" width="120" alt="Neon Void icon" />
 </p>
 
-<h1 align="center">CATALYX WIDGETS</h1>
-<h3 align="center">Neon Void — arcade game, ML testbed, Foundry experiment</h3>
+<h1 align="center">NEON VOID</h1>
 
 <p align="center">
-  <strong>Drift. Survive. Upgrade. Break the combo ceiling.</strong><br />
+  <strong>A neon arcade space shooter — built to be fun first.</strong><br />
   <a href="https://mayphex.com"><strong>▶ Play now at mayphex.com</strong></a>
 </p>
 
@@ -16,34 +15,29 @@
 
 ---
 
-**CATALYX Widgets** is a monorepo for **Neon Void** — a neon-soaked canvas arcade shooter — shipped in two forms: a **public browser game** and a **Palantir Foundry OSDK widget** for enterprise experimentation. One game core, multiple surfaces, one long-term vision: train agents on the sim, play it everywhere, and eventually **persist player and model state in a Foundry ontology**.
+> **What this repo is:** A browser arcade game — drift, shoot, survive waves, upgrade blasters in the Void Shop.<br />
+> **What it is also:** An ML playground for training agents against the same sim.<br />
+> **What it is not:** A Foundry widget project that happens to have a game. The game is the point.
+
+**Neon Void** is a canvas arcade shooter built with React and TypeScript. You fight escalating enemy waves, chain combos, spend credits between rounds, and unlock blasters and ship skins. It runs in the browser today at **[mayphex.com](https://mayphex.com)** with desktop and mobile controls.
+
+The repo happens to live in a monorepo that *also* contains a **Palantir Foundry port** — a side experiment to embed the same game inside Foundry and eventually persist save states in an ontology. That port is secondary. The fun game comes first.
 
 ---
 
-## What lives here
+## Why this exists
 
-| Package | What it is |
-|---------|------------|
-| **[`game/`](./game/)** | Standalone Neon Void. Public npm deps only. Deployed to **[mayphex.com](https://mayphex.com)** via GitHub Pages. |
-| **[`foundry-widget/`](./foundry-widget/)** | The **Foundry port** — same game embedded as a Palantir OSDK custom widget for experimenting inside Foundry workspaces. |
+Three goals, in order:
 
-`foundry-widget/src/game` symlinks to `game/src/game`. Fix gameplay once; both surfaces get it.
+1. **Make a fun game** — tight combat loop, juicy particles, shop meta-progression, mobile-friendly controls
+2. **Train agents on it** — headless simulation, observation/action APIs, AI Mode for watching bots (and future model shootouts)
+3. **Port it into Foundry on the side** — OSDK widget wrapper around the same game core; long-term idea to ontologize saves, runs, and agent performance in Palantir
 
-```
-game/src/game/          ← single source of truth (engine, sim, ML interface)
-       ↑
-       └── foundry-widget/src/game   (symlink)
-```
-
-Full game docs, controls, and ML details: **[`game/README.md`](./game/README.md)**
+If you cloned this expecting a `@osdk/create-widget` scaffold with a placeholder UI — look at **`game/`**. That's the actual product.
 
 ---
 
-## The game
-
-You are alone in the void — a single ship against an endless neon tide. Enemies spiral in from every angle. Your hull cracks. Your combo climbs. Credits pile up. Between waves, the **Void Shop** opens and you decide what kind of pilot you become next.
-
-### The loop
+## The loop
 
 ```
 LAUNCH → FIGHT THE WAVE → EARN CREDITS → VOID SHOP → NEXT WAVE → …
@@ -51,119 +45,128 @@ LAUNCH → FIGHT THE WAVE → EARN CREDITS → VOID SHOP → NEXT WAVE → …
                 └──────────── boss waves · bigger stakes ──────┘
 ```
 
-- **Wave survival** — Drifters, Hunters, Orbiters, Splitters, Bosses, and more
-- **Combo scoring** — chain kills, push the multiplier
-- **Void Shop** — blasters, hull support, ship skins between waves
-- **Powerups** — rapid, spread, pierce, damage, heal, mega
-- **AI Mode** — rule-based bot today; trained models tomorrow
+You start with the **Pulse Bolt** blaster and 100 hull integrity. Enemies escalate from **Drifters** to **Hunters**, **Orbiters**, **Splitters**, and **Bosses**. Chain kills for combo multipliers. Grab powerups mid-fight. Between waves, the **Void Shop** opens — blasters, hull repair, ship skins. Your loadout persists. Each run is a build path.
+
+| | Desktop | Mobile |
+|---|---------|--------|
+| **Move** | `W` `A` `S` `D` | Left thumb joystick |
+| **Aim & fire** | Mouse / `Space` | Right thumb aim & fire |
+| **Pause** | `Esc` / `P` | `Esc` / `P` |
+
+**AI Mode** on the main menu launches a rule-based bot today. The plan is to swap in trained models and compare them in the same arena.
+
+Full gameplay docs: **[`game/README.md`](./game/README.md)**
 
 ---
 
-## Two surfaces, one core
+## Play it locally
 
-### `game/` — the public build
-
-The standalone package is what ships to the internet. React shell + Canvas 2D engine. Mobile touch controls. No Foundry dependencies. This is the player-facing product and the **ML training environment**.
+The game lives in **`game/`**. No Foundry account required.
 
 ```sh
 cd game
 npm install
 npm run dev        # http://localhost:3000
-npm run build      # → game/dist
+npm run build      # → game/dist (what ships to mayphex.com)
 ```
 
-### `foundry-widget/` — the Foundry port
+**Stack:** React 18 · Canvas 2D · TypeScript · Vite 7 · `localStorage` for saves
 
-The Foundry widget is the **enterprise experiment surface** — Neon Void running inside **Palantir Foundry** via the **OSDK** (`@osdk/client`, `@osdk/widget.client-react`). Use it to:
+**Engine:** `GameSim` + `GameRenderer` — pooled entities, procedural planets, particle VFX, wave/shop systems. No Unity, no Phaser.
 
-- Embed the game in Foundry dashboards and workspaces
-- Prototype how gameplay data connects to the rest of a Foundry stack
-- Test widget UX, auth, and deployment in a real Foundry environment before wider rollout
+---
+
+## ML side project
+
+The sim was built with training in mind:
+
+- **Headless `GameSim`** — fast rollouts, no rendering
+- **`observe(sim)`** — fixed observation vector (player, enemies, bullets, powerups)
+- **`agentActionToInput()`** — 18 discrete actions for RL loops
+- **`RuleBot`** — heuristic baseline in AI Mode now
+
+**Coming next:** training suite, model comparison in AI Mode, evaluation harnesses, leaderboards per policy.
+
+```ts
+const sim = new GameSim({ headless: true });
+sim.start();
+while (sim.phase === "playing") {
+  const obs = observe(sim);
+  sim.update(1 / 60, agentActionToInput(agent.act(obs), sim));
+}
+```
+
+The game is the gym. AI Mode is the spectator sport until the models are ready.
+
+---
+
+## Foundry port (side experiment)
+
+The **`foundry-widget/`** package wraps the same game for **Palantir Foundry** via the OSDK. It symlinks `game/src/game` — one codebase, two surfaces.
+
+```
+game/src/game/     ← the game (engine, sim, rendering, ML interface)
+       ↑
+       └── foundry-widget/src/game   (symlink — Foundry shell only)
+```
+
+**Why bother?** To experiment with embedding Neon Void inside Foundry workspaces and, eventually, **ontologize** game data — save states, run telemetry, agent performance — as Foundry objects instead of browser `localStorage`.
+
+| Future ontology concept | Example |
+|-------------------------|---------|
+| Save states | Wave, credits, loadout snapshots |
+| Run telemetry | Score, deaths, shop purchases |
+| Agent runs | Model ID, seed, waves cleared |
+
+`IPersistence` is already a swap layer (`localStorage` today → Foundry-backed storage later). The Foundry widget is a sandbox for that vision, not the reason the game exists.
 
 ```sh
 cd foundry-widget
 npm install
-npm run dev
-npm run dev:remote   # code-workspaces mode
-npm run build
+npm run dev          # local widget dev
+npm run dev:remote   # Foundry code-workspaces
 ```
-
-The widget does not fork the game. It wraps the same `game/src/game` module the public build uses.
-
----
-
-## ML roadmap
-
-Neon Void is not just a game — it is a **reinforcement-learning testbed**.
-
-- **Headless `GameSim`** for fast rollouts without rendering
-- **`observe(sim)`** — fixed-size observation vector (player, enemies, bullets, powerups)
-- **`agentActionToInput()`** — 18 discrete actions for training loops
-- **`RuleBot`** — heuristic baseline in **AI Mode** right now
-
-**Coming next:** a full training suite, model shootouts in AI Mode, evaluation harnesses, and leaderboards per policy. The browser build is the arena; the sim is the gym.
-
-See [`game/README.md`](./game/README.md) for the training-loop sketch and architecture notes.
-
----
-
-## Foundry ontology vision
-
-Today, save data lives in **`localStorage`** through the `IPersistence` abstraction — high scores, owned blasters, equipped skins, and loadouts. That is the right default for a public web game.
-
-The **Foundry port** is where that data gets interesting.
-
-**The goal:** **ontologize** game state in Palantir — model runs, saves, and agent performance as first-class Foundry objects so you can query, join, and operationalize them alongside the rest of your data:
-
-| Concept | Ontology direction |
-|---------|-------------------|
-| **Player profiles** | Pilot identity, aggregate stats, unlock history |
-| **Save states** | Wave reached, credits, loadout, hull — snapshot objects per run |
-| **Run telemetry** | Score, combo peaks, deaths, shop purchases per session |
-| **Agent runs** | Model ID, seed, waves cleared, reward curves — compare policies in Foundry |
-| **Leaderboards** | Human vs bot performance linked to ontology records |
-
-`IPersistence` was designed as a swap layer — `LocalStoragePersistence` for the web, `MemoryPersistence` for training, and eventually a **Foundry-backed persistence** implementation that reads and writes ontology objects instead of browser storage.
-
-The widget is the sandbox. The ontology is the spine.
 
 ---
 
 ## Road to iOS
 
-The long game for the **public `game/` build** is a native **iOS release** — same sim, tuned touch controls, App Store distribution, optional on-device agents. The Foundry widget and the mobile app serve different surfaces; they share the same core.
+Long-term goal for the public build: native **iOS** — same sim, tuned touch controls, App Store. Mobile browser controls are already in production as the foundation.
 
 ---
 
-## Deploy
-
-Pushes to `master` run [`.github/workflows/deploy.yml`](./.github/workflows/deploy.yml), which builds `game/` and publishes to GitHub Pages at **mayphex.com**.
-
-The Foundry widget is built and deployed through Foundry's OSDK / CI pipeline (`foundry-widget/ci.yml`).
-
----
-
-## Repo map
+## Repo layout
 
 ```
-CATALYX-Widgets-repository/
-├── game/                    # Standalone Neon Void → mayphex.com
-│   ├── src/game/            # ★ shared game core
-│   ├── public/              # Favicon, OG image, icons
-│   └── README.md            # Deep dive: gameplay, ML, iOS
-├── foundry-widget/          # Palantir OSDK widget (symlinks game core)
-├── .github/workflows/       # GitHub Pages deploy
-└── README.md                # You are here
+Neon-Void/
+├── game/                 ★ THE GAME — play, build, deploy to mayphex.com
+│   ├── src/game/         shared game core (engine, sim, systems)
+│   ├── public/           favicon, OG image, icons
+│   └── README.md         deep dive
+├── foundry-widget/       Foundry OSDK wrapper (symlinks game core)
+├── .github/workflows/    GitHub Pages deploy for game/
+└── README.md             you are here
 ```
+
+Some root-level Foundry scaffolding files (`foundry.config.json`, `templateConfig.json`, etc.) remain from the original widget template. **`game/` is the source of truth.**
 
 Contributor module map: [`game/src/game/README.md`](./game/src/game/README.md)
 
 ---
 
+## Deploy
+
+| Surface | How |
+|---------|-----|
+| **Public game** | Push to `master` → [`.github/workflows/deploy.yml`](./.github/workflows/deploy.yml) → GitHub Pages → **mayphex.com** |
+| **Foundry widget** | Foundry CI / OSDK pipeline (`foundry-widget/ci.yml`) |
+
+---
+
 <p align="center">
-  <strong>Play it publicly. Experiment in Foundry. Train the agents. Ontologize the saves. Ship it to iOS.</strong>
+  <strong>Fun game first. ML playground second. Foundry port on the side.</strong>
 </p>
 
 <p align="center">
-  <sub>CATALYX Widgets · Neon Void</sub>
+  <sub>Neon Void · CATALYX Widgets monorepo</sub>
 </p>

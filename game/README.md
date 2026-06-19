@@ -15,9 +15,15 @@
 
 ---
 
+> **Neon Void is a browser arcade shooter.** Fight waves, earn credits, upgrade blasters, unlock ship skins. Play at **[mayphex.com](https://mayphex.com)**.
+
+This folder is the **standalone public build** — the actual game. The repo also has an ML training interface and a separate Foundry widget port, but those are side paths. The goal here is simple: **make something fun to play.**
+
+---
+
 You are alone in the void — a single ship against an endless neon tide. Enemies spiral in from every angle. Your hull cracks. Your combo climbs. Credits pile up. Between waves, the **Void Shop** opens and you decide what kind of pilot you become next.
 
-Built as a fast canvas arcade game **and** a living testbed for reinforcement learning. Today you can play it in the browser. Tomorrow, trained agents will fight beside you in **AI Mode** — and the long game is a native **iOS** release.
+Along the way, the same sim doubles as an **ML playground** (headless training, AI Mode bots, future model shootouts) with a long-term **iOS** port in mind. Foundry integration lives in the sibling `foundry-widget/` package — not here.
 
 ---
 
@@ -167,10 +173,5 @@ Pushes to `master` build `game/` and publish to GitHub Pages at **[mayphex.com](
 ---
 
 <p align="center">
-  <strong>Neon Void</strong> — part of the <a href="../">CATALYX Widgets</a> monorepo.<br />
-  Same game core powers the Palantir Foundry OSDK widget in <code>foundry-widget/</code>.
-</p>
-
-<p align="center">
-  <sub>Survive the waves. Train the agents. Ship it to iOS.</sub>
+  <sub>Make a fun game. Train agents on it. Ship it everywhere.</sub>
 </p>
