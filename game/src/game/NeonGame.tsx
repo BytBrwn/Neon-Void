@@ -107,7 +107,17 @@ export const NeonGame: React.FC = () => {
   const lastTimeRef = useRef<number>(0);
   const hudCacheRef = useRef<GameSnapshot | null>(null);
 
-  const touch = useTouchControls(inputRef, canvasRef);
+  const {
+    inputModeRef,
+    joystickVisualRef,
+    rightThumbVisualRef,
+    touchAimRef,
+    fireGraceUntilRef,
+    rightTouchIdRef,
+    handleTouchStart,
+    handleTouchMove,
+    handleTouchEnd,
+  } = useTouchControls(inputRef, canvasRef);
 
   const [hud, setHud] = useState<GameSnapshot>(() => ({
     phase: "menu", score: 0, wave: 1, combo: 0, health: 100, maxHealth: 100,
@@ -183,20 +193,20 @@ export const NeonGame: React.FC = () => {
       const dt = Math.min(0.033, (now - lastTimeRef.current) / 1000);
       lastTimeRef.current = now;
 
-      const touchMode = touch.inputModeRef.current === "touch";
+      const touchMode = inputModeRef.current === "touch";
       const playing = engine.phase === "playing" || engine.phase === "sandbox";
       canvas.classList.toggle("neon-game__canvas--crosshair", !touchMode && playing);
 
       // Smooth aim for touch mode
       if (touchMode) {
-        const aim = touch.touchAimRef.current;
+        const aim = touchAimRef.current;
         aim.x += (aim.targetX - aim.x) * AIM_SMOOTHING;
         aim.y += (aim.targetY - aim.y) * AIM_SMOOTHING;
         inputRef.current.mouseX = aim.x;
         inputRef.current.mouseY = aim.y;
         if (playing) {
           inputRef.current.mouseDown =
-            touch.rightTouchIdRef.current !== null || now < touch.fireGraceUntilRef.current;
+            rightTouchIdRef.current !== null || now < fireGraceUntilRef.current;
         }
       }
 
@@ -211,9 +221,9 @@ export const NeonGame: React.FC = () => {
       if (overlayCtx && overlay) {
         overlayCtx.clearRect(0, 0, overlay.clientWidth, overlay.clientHeight);
         if (touchMode) {
-          const joy = touch.joystickVisualRef.current;
+          const joy = joystickVisualRef.current;
           if (joy.active) drawJoystickIndicator(overlayCtx, joy);
-          const thumb = touch.rightThumbVisualRef.current;
+          const thumb = rightThumbVisualRef.current;
           if (thumb.active) drawRightThumbCrosshair(overlayCtx, thumb.x, thumb.y);
         } else if (playing) {
           const p = engine.player;
@@ -238,7 +248,7 @@ export const NeonGame: React.FC = () => {
       engine.destroy();
       engineRef.current = null;
     };
-  }, [applyHud, touch]);
+  }, [applyHud, inputModeRef, touchAimRef, rightTouchIdRef, fireGraceUntilRef, joystickVisualRef, rightThumbVisualRef]);
 
   // Keyboard input
   useEffect(() => {
@@ -272,7 +282,7 @@ export const NeonGame: React.FC = () => {
   }, [applyHud]);
 
   const syncMouse = (event: React.MouseEvent<HTMLCanvasElement>): void => {
-    touch.inputModeRef.current = "mouse";
+    inputModeRef.current = "mouse";
     const canvas = canvasRef.current;
     if (!canvas) return;
     const rect = canvas.getBoundingClientRect();
@@ -281,7 +291,7 @@ export const NeonGame: React.FC = () => {
   };
 
   const handleMouseDown = (event: React.MouseEvent<HTMLCanvasElement>): void => {
-    touch.inputModeRef.current = "mouse";
+    inputModeRef.current = "mouse";
     syncMouse(event);
     const engine = engineRef.current;
     if (!engine || engine.phase === "menu" || engine.phase === "dead" || engine.phase === "shop") return;
@@ -303,12 +313,12 @@ export const NeonGame: React.FC = () => {
           className={`neon-game__canvas${hud.phase === "menu" ? " neon-game__canvas--menu" : ""}`}
           onMouseMove={syncMouse}
           onMouseDown={handleMouseDown}
-          onMouseUp={() => { if (touch.inputModeRef.current === "mouse") inputRef.current.mouseDown = false; }}
-          onMouseLeave={() => { if (touch.inputModeRef.current === "mouse") inputRef.current.mouseDown = false; }}
-          onTouchStart={touch.handleTouchStart}
-          onTouchMove={touch.handleTouchMove}
-          onTouchEnd={touch.handleTouchEnd}
-          onTouchCancel={touch.handleTouchEnd}
+          onMouseUp={() => { if (inputModeRef.current === "mouse") inputRef.current.mouseDown = false; }}
+          onMouseLeave={() => { if (inputModeRef.current === "mouse") inputRef.current.mouseDown = false; }}
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
+          onTouchCancel={handleTouchEnd}
         />
         <canvas ref={overlayRef} className="neon-game__touch-overlay" aria-hidden />
       </div>
