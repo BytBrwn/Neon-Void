@@ -164,4 +164,5 @@ export type GameSnapshot = {
   inSandbox: boolean;
   roundFrozen: boolean;
   sandboxInvincible: boolean;
+  botMode?: boolean;
 };

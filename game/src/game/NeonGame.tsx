@@ -6,6 +6,8 @@ import { NeonEngine } from "./engine.js";
 import type { BlasterId, GameSnapshot, InputState, ShopSupportId, ShipSkinId } from "./types.js";
 import { getShipSkinPreviewUrl, getShipSkinSpec } from "./shipSkins.js";
 import { useTouchControls } from "./hooks/useTouchControls.js";
+import { ruleBotAction } from "./core/RuleBot.js";
+import { agentActionToInput } from "./core/ml.js";
 
 const AIM_SMOOTHING = 0.65;
 const MOBILE_SHAKE_SCALE = 0.5;
@@ -92,6 +94,8 @@ function hudChanged(prev: GameSnapshot, next: GameSnapshot): boolean {
     prev.inSandbox !== next.inSandbox ||
     prev.roundFrozen !== next.roundFrozen ||
     prev.sandboxInvincible !== next.sandboxInvincible ||
+    prev.botMode !== next.botMode ||
+
     prev.shopBlasters !== next.shopBlasters ||
     prev.shopOffers !== next.shopOffers ||
     prev.shopSkins !== next.shopSkins
@@ -106,6 +110,8 @@ export const NeonGame: React.FC = () => {
   const frameRef = useRef<number>(0);
   const lastTimeRef = useRef<number>(0);
   const hudCacheRef = useRef<GameSnapshot | null>(null);
+  const botModeRef = useRef(false);
+  const autoRespawnRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const {
     inputModeRef,
@@ -123,7 +129,7 @@ export const NeonGame: React.FC = () => {
     phase: "menu", score: 0, wave: 1, combo: 0, health: 100, maxHealth: 100,
     highScore: 0, waveTotal: 0, waveLeft: 0, blasterLabel: "PULSE BOLT",
     waveBanner: "", credits: 0, shopBlasters: [], shopOffers: [], shopSkins: [],
-    inSandbox: false, roundFrozen: false, sandboxInvincible: true,
+    inSandbox: false, roundFrozen: false, sandboxInvincible: true, botMode: false,
   }));
 
   const [shopTab, setShopTab] = useState<"blasters" | "support" | "skins">("blasters");
@@ -136,7 +142,7 @@ export const NeonGame: React.FC = () => {
   }, []);
 
   const syncHud = useCallback(() => {
-    if (engineRef.current) applyHud(engineRef.current.snapshot());
+    if (engineRef.current) applyHud({ ...engineRef.current.snapshot(), botMode: botModeRef.current });
   }, [applyHud]);
 
   const togglePause = useCallback(() => { engineRef.current?.togglePause(); syncHud(); }, [syncHud]);
@@ -182,7 +188,7 @@ export const NeonGame: React.FC = () => {
         overlayCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
       }
       engine.resize(width, height);
-      applyHud(engine.snapshot());
+      applyHud({ ...engine.snapshot(), botMode: botModeRef.current });
     };
 
     resize();
@@ -207,6 +213,25 @@ export const NeonGame: React.FC = () => {
         if (playing) {
           inputRef.current.mouseDown =
             rightTouchIdRef.current !== null || now < fireGraceUntilRef.current;
+        }
+      }
+
+      // Bot mode: override shop and playing input
+      if (botModeRef.current) {
+        if (engine.phase === "shop") {
+          engine.buyShopSupport("repair");
+          engine.leaveShop();
+          syncHud();
+        } else if (engine.phase === "playing" || engine.phase === "sandbox") {
+          inputRef.current = agentActionToInput(ruleBotAction(engine), engine);
+        } else if (engine.phase === "dead") {
+          if (!autoRespawnRef.current) {
+            autoRespawnRef.current = setTimeout(() => {
+              autoRespawnRef.current = null;
+              engine.start();
+              syncHud();
+            }, 1500);
+          }
         }
       }
 
@@ -235,7 +260,7 @@ export const NeonGame: React.FC = () => {
       }
 
       // Poll HUD at 4 Hz (250ms) to avoid setState on every frame
-      if (Math.floor(now / 250) % 2 === 0) applyHud(engine.snapshot());
+      if (Math.floor(now / 250) % 2 === 0) applyHud({ ...engine.snapshot(), botMode: botModeRef.current });
 
       frameRef.current = requestAnimationFrame(loop);
     };
@@ -245,6 +270,7 @@ export const NeonGame: React.FC = () => {
     return () => {
       window.removeEventListener("resize", resize);
       cancelAnimationFrame(frameRef.current);
+      if (autoRespawnRef.current) { clearTimeout(autoRespawnRef.current); autoRespawnRef.current = null; }
       engine.destroy();
       engineRef.current = null;
     };
@@ -335,6 +361,7 @@ export const NeonGame: React.FC = () => {
             <span className="neon-game__credits">{hud.credits.toLocaleString()} CR</span>
             <span>WAVE {hud.wave} · {hud.waveLeft}/{hud.waveTotal || "—"}</span>
             {hud.roundFrozen && !hud.inSandbox && <span className="neon-game__sandbox-tag">FROZEN</span>}
+            {hud.botMode && <span className="neon-game__sandbox-tag">BOT</span>}
             <span>COMBO x{hud.combo}</span>
             <span>HI {hud.highScore.toLocaleString()}</span>
             {showRunChrome && (
@@ -368,6 +395,10 @@ export const NeonGame: React.FC = () => {
             WASD to drift · Start with Pulse Bolt · Unlock blasters in the shop
           </p>
           <button className="neon-game__btn" type="button" onClick={startGame}>Launch</button>
+          <button className="neon-game__btn neon-game__btn--ghost" type="button" onClick={() => {
+            botModeRef.current = true;
+            startGame();
+          }}>AI Mode</button>
           {DEBUG_TOOLS_ENABLED && (
             <button className="neon-game__btn neon-game__btn--ghost" type="button" onClick={enterSandbox}>
               Sandbox
