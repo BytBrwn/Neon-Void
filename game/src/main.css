@@ -3,9 +3,11 @@ body {
   margin: 0;
   height: 100%;
   overflow: hidden;
+  overscroll-behavior: none;
   background: #030014;
   color: #eef2ff;
   font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  touch-action: manipulation;
 }
 
 #root {
@@ -26,6 +28,12 @@ body {
   overflow: hidden;
 }
 
+.neon-game__stage {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
 .neon-game__canvas {
   display: block;
   width: 100%;
@@ -34,6 +42,15 @@ body {
   touch-action: none;
   position: relative;
   z-index: 0;
+}
+
+.neon-game__touch-overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 1;
 }
 
 .neon-game__canvas--menu {

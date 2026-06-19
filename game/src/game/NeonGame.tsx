@@ -13,6 +13,96 @@ const defaultInput: InputState = {
   mouseDown: false,
 };
 
+const JOYSTICK_DEAD_ZONE = 12;
+const JOYSTICK_MAX_RADIUS = 56;
+const JOYSTICK_RING_RADIUS = 44;
+
+type CanvasPoint = { x: number; y: number; width: number; height: number };
+
+type LeftTouchState = {
+  id: number;
+  originX: number;
+  originY: number;
+};
+
+type JoystickVisual = {
+  originX: number;
+  originY: number;
+  stickX: number;
+  stickY: number;
+  active: boolean;
+};
+
+function canvasPoint(canvas: HTMLCanvasElement, clientX: number, clientY: number): CanvasPoint {
+  const rect = canvas.getBoundingClientRect();
+  return {
+    x: clientX - rect.left,
+    y: clientY - rect.top,
+    width: rect.width,
+    height: rect.height,
+  };
+}
+
+function clearTouchArrowKeys(keys: Set<string>, touchArrowKeys: Set<string>): void {
+  for (const code of touchArrowKeys) keys.delete(code);
+  touchArrowKeys.clear();
+}
+
+function applyJoystickToKeys(
+  keys: Set<string>,
+  touchArrowKeys: Set<string>,
+  dx: number,
+  dy: number,
+): void {
+  clearTouchArrowKeys(keys, touchArrowKeys);
+  const dist = Math.hypot(dx, dy);
+  if (dist < JOYSTICK_DEAD_ZONE) return;
+
+  const nx = dx / dist;
+  const ny = dy / dist;
+  const threshold = 0.38;
+
+  if (nx < -threshold) {
+    keys.add("ArrowLeft");
+    touchArrowKeys.add("ArrowLeft");
+  } else if (nx > threshold) {
+    keys.add("ArrowRight");
+    touchArrowKeys.add("ArrowRight");
+  }
+  if (ny < -threshold) {
+    keys.add("ArrowUp");
+    touchArrowKeys.add("ArrowUp");
+  } else if (ny > threshold) {
+    keys.add("ArrowDown");
+    touchArrowKeys.add("ArrowDown");
+  }
+}
+
+function clampJoystickDelta(dx: number, dy: number): { dx: number; dy: number } {
+  const dist = Math.hypot(dx, dy);
+  if (dist <= JOYSTICK_MAX_RADIUS || dist === 0) return { dx, dy };
+  const scale = JOYSTICK_MAX_RADIUS / dist;
+  return { dx: dx * scale, dy: dy * scale };
+}
+
+function drawJoystickIndicator(ctx: CanvasRenderingContext2D, joy: JoystickVisual): void {
+  ctx.save();
+  ctx.strokeStyle = "rgba(180, 255, 230, 0.22)";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.arc(joy.originX, joy.originY, JOYSTICK_RING_RADIUS, 0, Math.PI * 2);
+  ctx.stroke();
+
+  ctx.fillStyle = "rgba(0, 255, 220, 0.38)";
+  ctx.strokeStyle = "rgba(180, 255, 240, 0.55)";
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.arc(joy.stickX, joy.stickY, 10, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.restore();
+}
+
 function hudChanged(prev: GameSnapshot, next: GameSnapshot): boolean {
   return (
     prev.phase !== next.phase
@@ -38,10 +128,22 @@ function hudChanged(prev: GameSnapshot, next: GameSnapshot): boolean {
 
 export const NeonGame: React.FC = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const overlayRef = useRef<HTMLCanvasElement>(null);
   const engineRef = useRef<NeonEngine | null>(null);
   const inputRef = useRef<InputState>({ ...defaultInput, keys: new Set() });
   const frameRef = useRef<number>(0);
   const lastTimeRef = useRef<number>(0);
+  const touchEnabled = typeof window !== "undefined" && "ontouchstart" in window;
+  const leftTouchRef = useRef<LeftTouchState | null>(null);
+  const rightTouchIdRef = useRef<number | null>(null);
+  const touchArrowKeysRef = useRef<Set<string>>(new Set());
+  const joystickVisualRef = useRef<JoystickVisual>({
+    originX: 0,
+    originY: 0,
+    stickX: 0,
+    stickY: 0,
+    active: false,
+  });
 
   const [hud, setHud] = useState<GameSnapshot>(() => ({
     phase: "menu",
@@ -138,6 +240,7 @@ export const NeonGame: React.FC = () => {
 
   useEffect(() => {
     const canvas = canvasRef.current;
+    const overlay = overlayRef.current;
     if (!canvas) return;
 
     const engine = new NeonEngine();
@@ -145,6 +248,7 @@ export const NeonGame: React.FC = () => {
 
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
+    const overlayCtx = touchEnabled && overlay ? overlay.getContext("2d") : null;
 
     const resize = (): void => {
       const parent = canvas.parentElement;
@@ -157,6 +261,13 @@ export const NeonGame: React.FC = () => {
       canvas.style.width = `${width}px`;
       canvas.style.height = `${height}px`;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      if (overlay && overlayCtx) {
+        overlay.width = Math.floor(width * dpr);
+        overlay.height = Math.floor(height * dpr);
+        overlay.style.width = `${width}px`;
+        overlay.style.height = `${height}px`;
+        overlayCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      }
       engine.resize(width, height);
       applyHud(engine.snapshot());
     };
@@ -171,6 +282,12 @@ export const NeonGame: React.FC = () => {
 
       engine.update(dt, inputRef.current);
       engine.draw(ctx);
+
+      if (overlayCtx && overlay) {
+        overlayCtx.clearRect(0, 0, overlay.clientWidth, overlay.clientHeight);
+        const joy = joystickVisualRef.current;
+        if (joy.active) drawJoystickIndicator(overlayCtx, joy);
+      }
 
       if (Math.floor(now / 250) % 2 === 0) {
         applyHud(engine.snapshot());
@@ -187,7 +304,7 @@ export const NeonGame: React.FC = () => {
       engine.destroy();
       engineRef.current = null;
     };
-  }, [applyHud]);
+  }, [applyHud, touchEnabled]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
@@ -228,9 +345,110 @@ export const NeonGame: React.FC = () => {
   const syncMouse = (event: React.MouseEvent<HTMLCanvasElement>): void => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const rect = canvas.getBoundingClientRect();
-    inputRef.current.mouseX = event.clientX - rect.left;
-    inputRef.current.mouseY = event.clientY - rect.top;
+    const point = canvasPoint(canvas, event.clientX, event.clientY);
+    inputRef.current.mouseX = point.x;
+    inputRef.current.mouseY = point.y;
+  };
+
+  const touchGameplayActive = (): boolean => {
+    const engine = engineRef.current;
+    return !!engine && (engine.phase === "playing" || engine.phase === "sandbox");
+  };
+
+  const releaseLeftTouch = (): void => {
+    leftTouchRef.current = null;
+    clearTouchArrowKeys(inputRef.current.keys, touchArrowKeysRef.current);
+    joystickVisualRef.current.active = false;
+  };
+
+  const releaseRightTouch = (): void => {
+    rightTouchIdRef.current = null;
+    inputRef.current.mouseDown = false;
+  };
+
+  const updateLeftTouch = (point: CanvasPoint): void => {
+    const left = leftTouchRef.current;
+    if (!left) return;
+
+    const rawDx = point.x - left.originX;
+    const rawDy = point.y - left.originY;
+    const { dx, dy } = clampJoystickDelta(rawDx, rawDy);
+
+    joystickVisualRef.current = {
+      originX: left.originX,
+      originY: left.originY,
+      stickX: left.originX + dx,
+      stickY: left.originY + dy,
+      active: true,
+    };
+    applyJoystickToKeys(inputRef.current.keys, touchArrowKeysRef.current, dx, dy);
+  };
+
+  const updateRightTouch = (point: CanvasPoint): void => {
+    inputRef.current.mouseX = point.x;
+    inputRef.current.mouseY = point.y;
+    if (touchGameplayActive()) {
+      inputRef.current.mouseDown = true;
+    }
+  };
+
+  const handleTouchStart = (event: React.TouchEvent<HTMLCanvasElement>): void => {
+    event.preventDefault();
+    if (!touchEnabled) return;
+
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    for (const touch of Array.from(event.changedTouches)) {
+      const point = canvasPoint(canvas, touch.clientX, touch.clientY);
+      const onLeft = point.x < point.width * 0.5;
+
+      if (onLeft && !leftTouchRef.current) {
+        leftTouchRef.current = {
+          id: touch.identifier,
+          originX: point.x,
+          originY: point.y,
+        };
+        updateLeftTouch(point);
+      } else if (!onLeft && rightTouchIdRef.current === null) {
+        rightTouchIdRef.current = touch.identifier;
+        updateRightTouch(point);
+      }
+    }
+  };
+
+  const handleTouchMove = (event: React.TouchEvent<HTMLCanvasElement>): void => {
+    event.preventDefault();
+    if (!touchEnabled) return;
+
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    for (const touch of Array.from(event.changedTouches)) {
+      const point = canvasPoint(canvas, touch.clientX, touch.clientY);
+      const left = leftTouchRef.current;
+      if (left && touch.identifier === left.id) {
+        updateLeftTouch(point);
+        continue;
+      }
+      if (touch.identifier === rightTouchIdRef.current) {
+        updateRightTouch(point);
+      }
+    }
+  };
+
+  const handleTouchEnd = (event: React.TouchEvent<HTMLCanvasElement>): void => {
+    event.preventDefault();
+    if (!touchEnabled) return;
+
+    for (const touch of Array.from(event.changedTouches)) {
+      if (leftTouchRef.current?.id === touch.identifier) {
+        releaseLeftTouch();
+      }
+      if (rightTouchIdRef.current === touch.identifier) {
+        releaseRightTouch();
+      }
+    }
   };
 
   const handleMouseDown = (event: React.MouseEvent<HTMLCanvasElement>): void => {
@@ -250,18 +468,31 @@ export const NeonGame: React.FC = () => {
 
   return (
     <div className="neon-game">
-      <canvas
-        ref={canvasRef}
-        className={`neon-game__canvas${hud.phase === "menu" ? " neon-game__canvas--menu" : ""}`}
-        onMouseMove={syncMouse}
-        onMouseDown={handleMouseDown}
-        onMouseUp={() => {
-          inputRef.current.mouseDown = false;
-        }}
-        onMouseLeave={() => {
-          inputRef.current.mouseDown = false;
-        }}
-      />
+      <div className="neon-game__stage">
+        <canvas
+          ref={canvasRef}
+          className={`neon-game__canvas${hud.phase === "menu" ? " neon-game__canvas--menu" : ""}`}
+          onMouseMove={syncMouse}
+          onMouseDown={handleMouseDown}
+          onMouseUp={() => {
+            inputRef.current.mouseDown = false;
+          }}
+          onMouseLeave={() => {
+            inputRef.current.mouseDown = false;
+          }}
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
+          onTouchCancel={handleTouchEnd}
+        />
+        {touchEnabled && (
+          <canvas
+            ref={overlayRef}
+            className="neon-game__touch-overlay"
+            aria-hidden
+          />
+        )}
+      </div>
 
       {showHudStats && (
       <div className="neon-game__hud neon-game__chrome">
@@ -482,7 +713,9 @@ export const NeonGame: React.FC = () => {
 
       {showRunChrome && (
       <p className="neon-game__controls neon-game__chrome" aria-hidden="true">
-        MOVE WASD · FIRE MOUSE / SPACE · PAUSE ESC / P
+        {touchEnabled
+          ? "LEFT THUMB MOVE · RIGHT THUMB AIM & FIRE · PAUSE ESC / P"
+          : "MOVE WASD · FIRE MOUSE / SPACE · PAUSE ESC / P"}
       </p>
       )}
 
