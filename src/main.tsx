@@ -1,4 +1,3 @@
-import "@radix-ui/themes/styles.css";
 import "./main.css";
 
 import { OsdkProvider } from "@osdk/react";

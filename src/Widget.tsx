@@ -1,6 +1,6 @@
 import React from "react";
-import { SitePage } from "./site/SitePage.js";
+import { NeonGame } from "./game/NeonGame.js";
 
 export const Widget: React.FC = () => {
-  return <SitePage />;
+  return <NeonGame />;
 };
