@@ -9,6 +9,8 @@ Monorepo layout:
 
 ## Standalone game (`game/`)
 
+Full game documentation: **[game/README.md](./game/README.md)** (play link, controls, architecture, deploy).
+
 ```sh
 cd game
 npm install
