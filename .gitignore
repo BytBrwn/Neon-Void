@@ -16,6 +16,12 @@ dist-ssr
 *.local
 .pnpm-store
 
+# Capacitor iOS build artifacts (ios/ project itself is committed)
+game/ios/App/Pods/
+game/ios/App/build/
+game/ios/App/output/
+game/ios/App/App/public/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

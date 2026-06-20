@@ -144,9 +144,47 @@ npm run build
 
 ---
 
-## Road to iOS
+## Run on iOS (Simulator)
 
-Long-term: native **iOS** release — same sim, tuned touch controls, App Store, optional on-device agents. Mobile browser controls are already in production.
+Same codebase, wrapped with [Capacitor](https://capacitorjs.com) — no Swift, no React Native. Web deploy (`npm run build` → GitHub Pages) is unaffected.
+
+**Prerequisites**
+
+- Xcode (full app, not just Command Line Tools) + an Apple ID for signing
+- [CocoaPods](https://cocoapods.org) — `brew install cocoapods`
+- Node 22+
+
+**One-time setup**
+
+```sh
+cd game
+npm install
+npm run ios       # builds web, syncs to ios/, opens Xcode
+```
+
+In Xcode: select the **App** scheme, pick an iPhone simulator, set your signing team under *Signing & Capabilities*, then press **Run**.
+
+**Daily dev loop**
+
+```sh
+# edit game code in Cursor, then:
+npm run ios        # rebuild web + cap sync + reopen Xcode
+# press Run in Xcode
+```
+
+For faster iteration without a full rebuild each time, run `npm run dev` (serves on `http://localhost:3000`) and point Capacitor's live reload at it instead of `npm run ios` — see the [Capacitor live reload guide](https://capacitorjs.com/docs/guides/live-reload).
+
+Useful scripts:
+
+| Script | What it does |
+|---|---|
+| `npm run build:ios` | `npm run build` + `npx cap sync ios` (copies web build + updates native deps) |
+| `npm run ios` | `build:ios` + opens `ios/App/App.xcworkspace` in Xcode |
+| `npm run ios:sync` | `npx cap sync ios` only (no rebuild) |
+
+**Left manual in Xcode:** signing team selection, final App Icon (the repo ships Capacitor's placeholder — drop a square 1024×1024 icon into `game/ios/App/App/Assets.xcassets/AppIcon.appiconset`), and TestFlight/App Store distribution.
+
+Save data persists across launches on-device via `CapacitorPersistence` (`@capacitor/preferences`); the web build keeps using `localStorage`.
 
 ---
 

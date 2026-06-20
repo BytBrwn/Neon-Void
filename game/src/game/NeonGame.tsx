@@ -8,6 +8,7 @@ import { getShipSkinPreviewUrl, getShipSkinSpec } from "./shipSkins.js";
 import { useTouchControls } from "./hooks/useTouchControls.js";
 import { ruleBotAction } from "./core/RuleBot.js";
 import { agentActionToInput } from "./core/ml.js";
+import type { IPersistence } from "./persistence/IPersistence.js";
 
 const AIM_SMOOTHING = 0.65;
 const MOBILE_SHAKE_SCALE = 0.5;
@@ -102,7 +103,12 @@ function hudChanged(prev: GameSnapshot, next: GameSnapshot): boolean {
   );
 }
 
-export const NeonGame: React.FC = () => {
+export interface NeonGameProps {
+  /** Persistence backend for save/load. Defaults to the engine's built-in localStorage store. */
+  store?: IPersistence;
+}
+
+export const NeonGame: React.FC<NeonGameProps> = ({ store }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const overlayRef = useRef<HTMLCanvasElement>(null);
   const engineRef = useRef<NeonEngine | null>(null);
@@ -162,7 +168,7 @@ export const NeonGame: React.FC = () => {
     const overlay = overlayRef.current;
     if (!canvas) return;
 
-    const engine = new NeonEngine();
+    const engine = new NeonEngine({ store });
     engineRef.current = engine;
 
     const ctx = canvas.getContext("2d");
@@ -274,7 +280,7 @@ export const NeonGame: React.FC = () => {
       engine.destroy();
       engineRef.current = null;
     };
-  }, [applyHud, inputModeRef, touchAimRef, rightTouchIdRef, fireGraceUntilRef, joystickVisualRef, rightThumbVisualRef]);
+  }, [applyHud, inputModeRef, touchAimRef, rightTouchIdRef, fireGraceUntilRef, joystickVisualRef, rightThumbVisualRef, store]);
 
   // Keyboard input
   useEffect(() => {
