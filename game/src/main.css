@@ -70,6 +70,69 @@ body {
   z-index: 10;
 }
 
+.neon-volume {
+  position: absolute;
+  top: calc(0.9rem + env(safe-area-inset-top));
+  left: calc(0.9rem + env(safe-area-inset-left));
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.65rem;
+  border: 1px solid rgba(0, 255, 220, 0.25);
+  border-radius: 999px;
+  background: rgba(4, 10, 14, 0.7);
+  backdrop-filter: blur(6px);
+}
+
+.neon-volume__btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 1.5rem;
+  height: 1.5rem;
+  padding: 0;
+  border: none;
+  background: none;
+  color: rgba(180, 255, 240, 0.9);
+  cursor: pointer;
+}
+
+.neon-volume__btn:hover {
+  color: #fff;
+}
+
+.neon-volume__slider {
+  width: 72px;
+  height: 3px;
+  appearance: none;
+  background: rgba(0, 255, 220, 0.25);
+  border-radius: 999px;
+  outline: none;
+  cursor: pointer;
+}
+
+.neon-volume__slider::-webkit-slider-thumb {
+  appearance: none;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: rgba(180, 255, 240, 0.95);
+  box-shadow: 0 0 6px rgba(0, 255, 220, 0.6);
+  cursor: pointer;
+}
+
+.neon-volume__slider::-moz-range-thumb {
+  width: 11px;
+  height: 11px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(180, 255, 240, 0.95);
+  box-shadow: 0 0 6px rgba(0, 255, 220, 0.6);
+  cursor: pointer;
+}
+
 .neon-game__hud {
   position: absolute;
   top: 0;

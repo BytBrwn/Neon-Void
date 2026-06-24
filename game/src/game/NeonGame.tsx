@@ -9,6 +9,7 @@ import { useTouchControls } from "./hooks/useTouchControls.js";
 import { ruleBotAction } from "./core/RuleBot.js";
 import { agentActionToInput } from "./core/ml.js";
 import type { IPersistence } from "./persistence/IPersistence.js";
+import { loadVolume, saveVolume, loadMuted, saveMuted } from "./persistence.js";
 
 const AIM_SMOOTHING = 0.65;
 const MOBILE_SHAKE_SCALE = 0.5;
@@ -132,6 +133,22 @@ function hudChanged(prev: GameSnapshot, next: GameSnapshot): boolean {
   );
 }
 
+function VolumeIcon({ muted }: { muted: boolean }) {
+  return (
+    <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M3 9.5v5h3.6l5.1 4.4V5.1L6.6 9.5H3z" fill="currentColor" stroke="none" />
+      {muted ? (
+        <path d="M16 9l5 5M21 9l-5 5" />
+      ) : (
+        <>
+          <path d="M16 8.3a5 5 0 0 1 0 7.4" />
+          <path d="M18.6 5.8a8.7 8.7 0 0 1 0 12.4" />
+        </>
+      )}
+    </svg>
+  );
+}
+
 export interface NeonGameProps {
   /** Persistence backend for save/load. Defaults to the engine's built-in localStorage store. */
   store?: IPersistence;
@@ -162,12 +179,35 @@ export const NeonGame: React.FC<NeonGameProps> = ({ store }) => {
   const [debugDisplay, setDebugDisplay] = useState<DebugStats>(debugStatsRef.current);
   const slowFrameLogRef = useRef<SlowFrameEntry[]>([]);
   const [slowFrameCount, setSlowFrameCount] = useState(0);
+  const [volume, setVolume] = useState(() => loadVolume(store));
+  const [muted, setMuted] = useState(() => loadMuted(store));
 
   useEffect(() => { debugOpenRef.current = debugOpen; }, [debugOpen]);
 
   useEffect(() => {
-    if (musicRef.current) musicRef.current.volume = 0.45;
-  }, []);
+    if (musicRef.current) musicRef.current.volume = muted ? 0 : volume;
+  }, [volume, muted]);
+
+  const handleVolumeChange = useCallback(
+    (event: React.ChangeEvent<HTMLInputElement>) => {
+      const next = Number(event.target.value);
+      setVolume(next);
+      saveVolume(next, store);
+      if (next > 0 && muted) {
+        setMuted(false);
+        saveMuted(false, store);
+      }
+    },
+    [muted, store],
+  );
+
+  const toggleMute = useCallback(() => {
+    setMuted((prev) => {
+      const next = !prev;
+      saveMuted(next, store);
+      return next;
+    });
+  }, [store]);
 
   const {
     inputModeRef,
@@ -505,6 +545,31 @@ export const NeonGame: React.FC<NeonGameProps> = ({ store }) => {
         <source src="/audio/theme.ogg" type="audio/ogg" />
         <source src="/audio/theme.mp3" type="audio/mpeg" />
       </audio>
+
+      {(hud.phase === "menu" || hud.phase === "paused") && (
+        <div className="neon-volume">
+          <button
+            type="button"
+            className="neon-volume__btn"
+            onClick={toggleMute}
+            aria-label={muted ? "Unmute" : "Mute"}
+            title={muted ? "Unmute" : "Mute"}
+          >
+            <VolumeIcon muted={muted || volume === 0} />
+          </button>
+          <input
+            type="range"
+            className="neon-volume__slider"
+            min={0}
+            max={1}
+            step={0.01}
+            value={muted ? 0 : volume}
+            onChange={handleVolumeChange}
+            aria-label="Music volume"
+          />
+        </div>
+      )}
+
       <div className="neon-game__stage">
         <canvas
           ref={canvasRef}
