@@ -24,6 +24,7 @@
 
 import type { EnemyKind, PowerupKind } from "../types.js";
 import type { GameSim } from "./GameSim.js";
+import { getBlasterDef } from "../factories/blasterFactory.js";
 
 // ---------------------------------------------------------------------------
 // Action space
@@ -74,10 +75,11 @@ export function agentActionToInput(
   const fire = action >= ML_MOVE_DIRS;
   const keys = new Set<string>(KEY_SETS[move]);
 
-  // Aim toward nearest enemy or straight ahead
+  // Aim toward nearest enemy (with velocity lead) or straight ahead
   let aimX = sim.player.x + Math.cos(sim.player.aimAngle) * 200;
   let aimY = sim.player.y + Math.sin(sim.player.aimAngle) * 200;
   let nearestDist = Infinity;
+  let target = null as null | { x: number; y: number; vx: number; vy: number };
   for (let i = 0; i < sim.enemies.count; i++) {
     const e = sim.enemies.buf[i];
     const dx = e.x - sim.player.x;
@@ -85,9 +87,19 @@ export function agentActionToInput(
     const d = dx * dx + dy * dy;
     if (d < nearestDist) {
       nearestDist = d;
-      aimX = e.x;
-      aimY = e.y;
+      target = e;
     }
+  }
+
+  if (target) {
+    // Lead the shot: estimate bullet travel time at the equipped blaster's
+    // speed and project the enemy's position forward by that long, so fast
+    // orbiting/strafing enemies (e.g. orbiter) actually get hit instead of
+    // the bot perpetually firing at where they used to be.
+    const bulletSpeed = getBlasterDef(sim.player.blaster).shots[0]?.speed ?? 800;
+    const travelTime = Math.sqrt(nearestDist) / bulletSpeed;
+    aimX = target.x + target.vx * travelTime;
+    aimY = target.y + target.vy * travelTime;
   }
 
   return { keys, mouseX: aimX, mouseY: aimY, mouseDown: fire };

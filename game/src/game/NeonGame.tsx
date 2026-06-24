@@ -287,6 +287,18 @@ export const NeonGame: React.FC<NeonGameProps> = ({ store }) => {
     window.addEventListener("resize", resize);
 
     const loop = (now: number): void => {
+      // Backgrounded/minimized tabs get heavily throttled by the browser —
+      // skip all simulation/draw work and reset timing state so the gap
+      // doesn't show up as a fake slow frame or a giant dt once the tab
+      // becomes visible again.
+      if (document.hidden) {
+        lastTimeRef.current = 0;
+        fpsSampleStartRef.current = 0;
+        fpsFrameCountRef.current = 0;
+        frameRef.current = requestAnimationFrame(loop);
+        return;
+      }
+
       if (!lastTimeRef.current) lastTimeRef.current = now;
       const dt = Math.min(0.033, (now - lastTimeRef.current) / 1000);
       lastTimeRef.current = now;
