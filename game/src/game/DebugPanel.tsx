@@ -12,13 +12,29 @@ type DebugPanelProps = {
   onToggleOpen: () => void;
   stats: DebugStats;
   onStopBotMode: () => void;
+  slowFrameCount: number;
+  slowFrameThresholdMs: number;
+  onExportLog: () => void;
+  onClearLog: () => void;
 };
 
 function poolLine(label: string, pool: { count: number; capacity: number }): string {
   return `${label} ${pool.count}/${pool.capacity}`;
 }
 
-export const DebugPanel: React.FC<DebugPanelProps> = ({ engineRef, hud, onChange, open, onToggleOpen, stats, onStopBotMode }) => {
+export const DebugPanel: React.FC<DebugPanelProps> = ({
+  engineRef,
+  hud,
+  onChange,
+  open,
+  onToggleOpen,
+  stats,
+  onStopBotMode,
+  slowFrameCount,
+  slowFrameThresholdMs,
+  onExportLog,
+  onClearLog,
+}) => {
   if (!DEBUG_TOOLS_ENABLED) return null;
 
   const run = (action: (engine: NeonEngine) => void): void => {
@@ -48,6 +64,19 @@ export const DebugPanel: React.FC<DebugPanelProps> = ({ engineRef, hud, onChange
             <span>{poolLine("Bullets", stats.bullets)}</span>
             <span>{poolLine("Particles", stats.particles)}</span>
             <span>Phase: {hud.phase}{hud.botMode ? " · BOT" : ""}</span>
+          </div>
+
+          <p className="neon-debug__label">Investigation (frames &gt;{slowFrameThresholdMs}ms)</p>
+          <div className="neon-debug__stats">
+            <span>{slowFrameCount} slow frame{slowFrameCount === 1 ? "" : "s"} captured</span>
+          </div>
+          <div className="neon-debug__actions">
+            <button type="button" onClick={onExportLog} disabled={slowFrameCount === 0}>
+              Export log
+            </button>
+            <button type="button" onClick={onClearLog} disabled={slowFrameCount === 0}>
+              Clear log
+            </button>
           </div>
 
           <p className="neon-debug__label">Debug actions</p>

@@ -16,6 +16,10 @@ const DESKTOP_AIM_LINE_LENGTH = 80;
 const JOYSTICK_RING_RADIUS = 52;
 const JOYSTICK_DOT_RADIUS = 16;
 
+// A frame slower than this (ms) gets captured into the slow-frame log for QA investigation.
+const SLOW_FRAME_THRESHOLD_MS = 22;
+const MAX_SLOW_FRAME_LOG = 300;
+
 export type PoolStats = { count: number; capacity: number };
 
 export type DebugStats = {
@@ -24,6 +28,21 @@ export type DebugStats = {
   enemies: PoolStats;
   bullets: PoolStats;
   particles: PoolStats;
+};
+
+export type SlowFrameEntry = {
+  /** ms since page load (performance.now()) */
+  t: number;
+  updateMs: number;
+  drawMs: number;
+  totalMs: number;
+  fps: number;
+  phase: string;
+  wave: number;
+  enemies: number;
+  bullets: number;
+  particles: number;
+  botMode: boolean;
 };
 
 const defaultInput: InputState = {
@@ -140,6 +159,8 @@ export const NeonGame: React.FC<NeonGameProps> = ({ store }) => {
   const [debugOpen, setDebugOpen] = useState(false);
   const debugOpenRef = useRef(false);
   const [debugDisplay, setDebugDisplay] = useState<DebugStats>(debugStatsRef.current);
+  const slowFrameLogRef = useRef<SlowFrameEntry[]>([]);
+  const [slowFrameCount, setSlowFrameCount] = useState(0);
 
   useEffect(() => { debugOpenRef.current = debugOpen; }, [debugOpen]);
 
@@ -186,6 +207,46 @@ export const NeonGame: React.FC<NeonGameProps> = ({ store }) => {
   const resetSandbox = useCallback(() => { engineRef.current?.resetSandbox(); syncHud(); }, [syncHud]);
   const exitToMenu = useCallback(() => { botModeRef.current = false; engineRef.current?.exitToMenu(); syncHud(); }, [syncHud]);
   const stopBotMode = useCallback(() => { botModeRef.current = false; syncHud(); }, [syncHud]);
+
+  const clearQaLog = useCallback(() => {
+    slowFrameLogRef.current = [];
+    setSlowFrameCount(0);
+  }, []);
+
+  const exportQaLog = useCallback(() => {
+    const entries = slowFrameLogRef.current;
+    const avg = (key: "updateMs" | "drawMs" | "totalMs"): number =>
+      entries.length === 0 ? 0 : entries.reduce((sum, e) => sum + e[key], 0) / entries.length;
+    const worst = entries.reduce<SlowFrameEntry | null>(
+      (acc, e) => (!acc || e.totalMs > acc.totalMs ? e : acc),
+      null,
+    );
+    const payload = {
+      generatedAt: new Date().toISOString(),
+      thresholdMs: SLOW_FRAME_THRESHOLD_MS,
+      slowFrameCount: entries.length,
+      avgUpdateMs: avg("updateMs"),
+      avgDrawMs: avg("drawMs"),
+      avgTotalMs: avg("totalMs"),
+      worstFrame: worst,
+      entries,
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `neon-void-qa-log-${Date.now()}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, []);
+
+  const investigate = useCallback(() => {
+    clearQaLog();
+    startGame();
+    botModeRef.current = true;
+    setDebugOpen(true);
+    syncHud();
+  }, [clearQaLog, startGame, syncHud]);
 
   // Main game loop setup
   useEffect(() => {
@@ -277,12 +338,39 @@ export const NeonGame: React.FC<NeonGameProps> = ({ store }) => {
         }
       }
 
+      const updateStart = DEBUG_TOOLS_ENABLED ? performance.now() : 0;
       engine.update(dt, inputRef.current);
+      const updateEnd = DEBUG_TOOLS_ENABLED ? performance.now() : 0;
 
       // Dampen shake on mobile
       if (touchMode && engine.shake > 0) engine.shake *= MOBILE_SHAKE_SCALE;
 
       engine.draw(ctx);
+      const drawEnd = DEBUG_TOOLS_ENABLED ? performance.now() : 0;
+
+      // QA investigation: capture a snapshot whenever a frame runs slower than threshold
+      if (DEBUG_TOOLS_ENABLED) {
+        const updateMs = updateEnd - updateStart;
+        const drawMs = drawEnd - updateEnd;
+        const totalMs = updateMs + drawMs;
+        if (totalMs > SLOW_FRAME_THRESHOLD_MS) {
+          const log = slowFrameLogRef.current;
+          log.push({
+            t: now,
+            updateMs,
+            drawMs,
+            totalMs,
+            fps: debugStatsRef.current.fps,
+            phase: engine.phase,
+            wave: engine.wave,
+            enemies: engine.enemies.count,
+            bullets: engine.bullets.count,
+            particles: engine.particles.count,
+            botMode: botModeRef.current,
+          });
+          if (log.length > MAX_SLOW_FRAME_LOG) log.shift();
+        }
+      }
 
       // Draw touch/desktop overlays
       if (overlayCtx && overlay) {
@@ -309,6 +397,7 @@ export const NeonGame: React.FC<NeonGameProps> = ({ store }) => {
           debugStatsRef.current.bullets = { count: engine.bullets.count, capacity: engine.bullets.capacity };
           debugStatsRef.current.particles = { count: engine.particles.count, capacity: engine.particles.capacity };
           setDebugDisplay({ ...debugStatsRef.current });
+          setSlowFrameCount(slowFrameLogRef.current.length);
         }
       }
 
@@ -464,6 +553,16 @@ export const NeonGame: React.FC<NeonGameProps> = ({ store }) => {
             botModeRef.current = true;
             syncHud();
           }}>AI Mode</button>
+          {DEBUG_TOOLS_ENABLED && (
+            <button
+              className="neon-game__btn neon-game__btn--ghost"
+              type="button"
+              onClick={investigate}
+              title="AI plays automatically while the Debug panel logs slow frames for QA"
+            >
+              Investigate
+            </button>
+          )}
         </div>
       )}
 
@@ -608,6 +707,10 @@ export const NeonGame: React.FC<NeonGameProps> = ({ store }) => {
         onToggleOpen={() => setDebugOpen((value) => !value)}
         stats={debugDisplay}
         onStopBotMode={stopBotMode}
+        slowFrameCount={slowFrameCount}
+        slowFrameThresholdMs={SLOW_FRAME_THRESHOLD_MS}
+        onExportLog={exportQaLog}
+        onClearLog={clearQaLog}
       />
     </div>
   );
