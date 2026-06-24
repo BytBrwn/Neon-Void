@@ -1,17 +1,23 @@
-import React, { useState } from "react";
+import React from "react";
 import type { NeonEngine } from "./engine.js";
 import { DEBUG_TOOLS_ENABLED } from "./debug.js";
 import type { GameSnapshot } from "./types.js";
+import type { DebugStats } from "./NeonGame.js";
 
 type DebugPanelProps = {
   engineRef: React.RefObject<NeonEngine | null>;
   hud: GameSnapshot;
   onChange: () => void;
+  open: boolean;
+  onToggleOpen: () => void;
+  stats: DebugStats;
 };
 
-export const DebugPanel: React.FC<DebugPanelProps> = ({ engineRef, hud, onChange }) => {
-  const [open, setOpen] = useState(false);
+function poolLine(label: string, pool: { count: number; capacity: number }): string {
+  return `${label} ${pool.count}/${pool.capacity}`;
+}
 
+export const DebugPanel: React.FC<DebugPanelProps> = ({ engineRef, hud, onChange, open, onToggleOpen, stats }) => {
   if (!DEBUG_TOOLS_ENABLED) return null;
 
   const run = (action: (engine: NeonEngine) => void): void => {
@@ -26,15 +32,24 @@ export const DebugPanel: React.FC<DebugPanelProps> = ({ engineRef, hud, onChange
       <button
         className="neon-debug__toggle"
         type="button"
-        onClick={() => setOpen((value) => !value)}
+        onClick={onToggleOpen}
         aria-expanded={open}
       >
-        {open ? "Hide test" : "Test"}
+        {open ? "Hide debug" : "Debug"}
       </button>
 
       {open && (
         <div className="neon-debug__panel">
-          <p className="neon-debug__label">Debug only</p>
+          <p className="neon-debug__label">QA / Engine stats</p>
+          <div className="neon-debug__stats">
+            <span>{Math.round(stats.fps)} FPS · {stats.frameMs.toFixed(1)}ms/frame</span>
+            <span>{poolLine("Enemies", stats.enemies)}</span>
+            <span>{poolLine("Bullets", stats.bullets)}</span>
+            <span>{poolLine("Particles", stats.particles)}</span>
+            <span>Phase: {hud.phase}{hud.botMode ? " · BOT" : ""}</span>
+          </div>
+
+          <p className="neon-debug__label">Debug actions</p>
           <div className="neon-debug__actions">
             {hud.inSandbox ? (
               <button type="button" className="neon-debug__btn--active" onClick={() => run((e) => e.exitSandbox())}>

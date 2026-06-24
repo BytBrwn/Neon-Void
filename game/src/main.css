@@ -608,6 +608,40 @@ body {
   color: rgba(255, 180, 80, 0.75);
 }
 
+.neon-debug__stats {
+  display: flex;
+  flex-direction: column;
+  gap: 0.18rem;
+  margin: 0 0 0.6rem;
+  padding: 0.4rem 0.5rem;
+  border: 1px solid rgba(0, 255, 220, 0.18);
+  border-radius: 6px;
+  background: rgba(0, 255, 220, 0.04);
+  font-size: 0.56rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  color: rgba(180, 255, 240, 0.85);
+  font-family: ui-monospace, "SF Mono", "Courier New", monospace;
+}
+
+.neon-game__fps-meter {
+  position: absolute;
+  right: 0.75rem;
+  bottom: 0.6rem;
+  z-index: 21;
+  margin: 0;
+  padding: 0.25rem 0.55rem;
+  border: 1px solid rgba(0, 255, 220, 0.3);
+  border-radius: 999px;
+  background: rgba(4, 10, 14, 0.78);
+  color: rgba(170, 255, 235, 0.92);
+  font-family: ui-monospace, "SF Mono", "Courier New", monospace;
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  pointer-events: none;
+}
+
 .neon-debug__actions {
   display: grid;
   grid-template-columns: 1fr 1fr;

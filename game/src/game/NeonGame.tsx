@@ -16,6 +16,16 @@ const DESKTOP_AIM_LINE_LENGTH = 80;
 const JOYSTICK_RING_RADIUS = 52;
 const JOYSTICK_DOT_RADIUS = 16;
 
+export type PoolStats = { count: number; capacity: number };
+
+export type DebugStats = {
+  fps: number;
+  frameMs: number;
+  enemies: PoolStats;
+  bullets: PoolStats;
+  particles: PoolStats;
+};
+
 const defaultInput: InputState = {
   keys: new Set<string>(),
   mouseX: 0,
@@ -118,6 +128,20 @@ export const NeonGame: React.FC<NeonGameProps> = ({ store }) => {
   const hudCacheRef = useRef<GameSnapshot | null>(null);
   const botModeRef = useRef(false);
   const autoRespawnRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const debugStatsRef = useRef<DebugStats>({
+    fps: 0,
+    frameMs: 0,
+    enemies: { count: 0, capacity: 0 },
+    bullets: { count: 0, capacity: 0 },
+    particles: { count: 0, capacity: 0 },
+  });
+  const fpsFrameCountRef = useRef(0);
+  const fpsSampleStartRef = useRef(0);
+  const [debugOpen, setDebugOpen] = useState(false);
+  const debugOpenRef = useRef(false);
+  const [debugDisplay, setDebugDisplay] = useState<DebugStats>(debugStatsRef.current);
+
+  useEffect(() => { debugOpenRef.current = debugOpen; }, [debugOpen]);
 
   const {
     inputModeRef,
@@ -205,6 +229,17 @@ export const NeonGame: React.FC<NeonGameProps> = ({ store }) => {
       const dt = Math.min(0.033, (now - lastTimeRef.current) / 1000);
       lastTimeRef.current = now;
 
+      // FPS sampling — average over a rolling ~500ms window
+      fpsFrameCountRef.current += 1;
+      if (!fpsSampleStartRef.current) fpsSampleStartRef.current = now;
+      const fpsElapsed = now - fpsSampleStartRef.current;
+      if (fpsElapsed >= 500) {
+        debugStatsRef.current.fps = (fpsFrameCountRef.current * 1000) / fpsElapsed;
+        debugStatsRef.current.frameMs = fpsElapsed / fpsFrameCountRef.current;
+        fpsFrameCountRef.current = 0;
+        fpsSampleStartRef.current = now;
+      }
+
       const touchMode = inputModeRef.current === "touch";
       const playing = engine.phase === "playing" || engine.phase === "sandbox";
       canvas.classList.toggle("neon-game__canvas--crosshair", !touchMode && playing);
@@ -266,7 +301,15 @@ export const NeonGame: React.FC<NeonGameProps> = ({ store }) => {
       }
 
       // Poll HUD at 4 Hz (250ms) to avoid setState on every frame
-      if (Math.floor(now / 250) % 2 === 0) applyHud({ ...engine.snapshot(), botMode: botModeRef.current });
+      if (Math.floor(now / 250) % 2 === 0) {
+        applyHud({ ...engine.snapshot(), botMode: botModeRef.current });
+        if (debugOpenRef.current) {
+          debugStatsRef.current.enemies = { count: engine.enemies.count, capacity: engine.enemies.capacity };
+          debugStatsRef.current.bullets = { count: engine.bullets.count, capacity: engine.bullets.capacity };
+          debugStatsRef.current.particles = { count: engine.particles.count, capacity: engine.particles.capacity };
+          setDebugDisplay({ ...debugStatsRef.current });
+        }
+      }
 
       frameRef.current = requestAnimationFrame(loop);
     };
@@ -541,7 +584,20 @@ export const NeonGame: React.FC<NeonGameProps> = ({ store }) => {
         </p>
       )}
 
-      <DebugPanel engineRef={engineRef} hud={hud} onChange={syncHud} />
+      {debugOpen && (
+        <p className="neon-game__fps-meter" aria-hidden="true">
+          {Math.round(debugDisplay.fps)} FPS · {debugDisplay.frameMs.toFixed(1)}ms
+        </p>
+      )}
+
+      <DebugPanel
+        engineRef={engineRef}
+        hud={hud}
+        onChange={syncHud}
+        open={debugOpen}
+        onToggleOpen={() => setDebugOpen((value) => !value)}
+        stats={debugDisplay}
+      />
     </div>
   );
 };
