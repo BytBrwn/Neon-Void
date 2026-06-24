@@ -16,6 +16,7 @@ type DebugPanelProps = {
   slowFrameThresholdMs: number;
   onExportLog: () => void;
   onClearLog: () => void;
+  onInvestigate: () => void;
 };
 
 function poolLine(label: string, pool: { count: number; capacity: number }): string {
@@ -34,6 +35,7 @@ export const DebugPanel: React.FC<DebugPanelProps> = ({
   slowFrameThresholdMs,
   onExportLog,
   onClearLog,
+  onInvestigate,
 }) => {
   if (!DEBUG_TOOLS_ENABLED) return null;
 
@@ -70,6 +72,9 @@ export const DebugPanel: React.FC<DebugPanelProps> = ({
           <div className="neon-debug__stats">
             <span>{slowFrameCount} slow frame{slowFrameCount === 1 ? "" : "s"} captured</span>
           </div>
+          <button type="button" className="neon-debug__investigate" onClick={onInvestigate}>
+            ▶ Start investigation
+          </button>
           <div className="neon-debug__actions">
             <button type="button" onClick={onExportLog} disabled={slowFrameCount === 0}>
               Export log

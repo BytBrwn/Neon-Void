@@ -553,16 +553,6 @@ export const NeonGame: React.FC<NeonGameProps> = ({ store }) => {
             botModeRef.current = true;
             syncHud();
           }}>AI Mode</button>
-          {DEBUG_TOOLS_ENABLED && (
-            <button
-              className="neon-game__btn neon-game__btn--ghost"
-              type="button"
-              onClick={investigate}
-              title="AI plays automatically while the Debug panel logs slow frames for QA"
-            >
-              Investigate
-            </button>
-          )}
         </div>
       )}
 
@@ -711,6 +701,7 @@ export const NeonGame: React.FC<NeonGameProps> = ({ store }) => {
         slowFrameThresholdMs={SLOW_FRAME_THRESHOLD_MS}
         onExportLog={exportQaLog}
         onClearLog={clearQaLog}
+        onInvestigate={investigate}
       />
     </div>
   );
