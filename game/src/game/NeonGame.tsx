@@ -185,6 +185,7 @@ export const NeonGame: React.FC<NeonGameProps> = ({ store }) => {
   const leaveSandbox = useCallback(() => { engineRef.current?.exitSandbox(); syncHud(); }, [syncHud]);
   const resetSandbox = useCallback(() => { engineRef.current?.resetSandbox(); syncHud(); }, [syncHud]);
   const exitToMenu = useCallback(() => { botModeRef.current = false; engineRef.current?.exitToMenu(); syncHud(); }, [syncHud]);
+  const stopBotMode = useCallback(() => { botModeRef.current = false; syncHud(); }, [syncHud]);
 
   // Main game loop setup
   useEffect(() => {
@@ -410,7 +411,16 @@ export const NeonGame: React.FC<NeonGameProps> = ({ store }) => {
             <span className="neon-game__credits">{hud.credits.toLocaleString()} CR</span>
             <span>WAVE {hud.wave} · {hud.waveLeft}/{hud.waveTotal || "—"}</span>
             {hud.roundFrozen && !hud.inSandbox && <span className="neon-game__sandbox-tag">FROZEN</span>}
-            {hud.botMode && <span className="neon-game__sandbox-tag">BOT</span>}
+            {hud.botMode && (
+              <button
+                type="button"
+                className="neon-game__sandbox-tag neon-game__sandbox-tag--btn"
+                onClick={stopBotMode}
+                title="Stop AI mode"
+              >
+                BOT · STOP
+              </button>
+            )}
             <span>COMBO x{hud.combo}</span>
             <span>HI {hud.highScore.toLocaleString()}</span>
             {showRunChrome && (
@@ -597,6 +607,7 @@ export const NeonGame: React.FC<NeonGameProps> = ({ store }) => {
         open={debugOpen}
         onToggleOpen={() => setDebugOpen((value) => !value)}
         stats={debugDisplay}
+        onStopBotMode={stopBotMode}
       />
     </div>
   );

@@ -11,13 +11,14 @@ type DebugPanelProps = {
   open: boolean;
   onToggleOpen: () => void;
   stats: DebugStats;
+  onStopBotMode: () => void;
 };
 
 function poolLine(label: string, pool: { count: number; capacity: number }): string {
   return `${label} ${pool.count}/${pool.capacity}`;
 }
 
-export const DebugPanel: React.FC<DebugPanelProps> = ({ engineRef, hud, onChange, open, onToggleOpen, stats }) => {
+export const DebugPanel: React.FC<DebugPanelProps> = ({ engineRef, hud, onChange, open, onToggleOpen, stats, onStopBotMode }) => {
   if (!DEBUG_TOOLS_ENABLED) return null;
 
   const run = (action: (engine: NeonEngine) => void): void => {
@@ -51,6 +52,11 @@ export const DebugPanel: React.FC<DebugPanelProps> = ({ engineRef, hud, onChange
 
           <p className="neon-debug__label">Debug actions</p>
           <div className="neon-debug__actions">
+            {hud.botMode && (
+              <button type="button" className="neon-debug__btn--active" onClick={onStopBotMode}>
+                Stop AI
+              </button>
+            )}
             {hud.inSandbox ? (
               <button type="button" className="neon-debug__btn--active" onClick={() => run((e) => e.exitSandbox())}>
                 Exit sandbox
