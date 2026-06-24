@@ -448,7 +448,7 @@ export const NeonGame: React.FC<NeonGameProps> = ({ store }) => {
 
       {hud.phase === "menu" && (
         <div className="neon-game__overlay neon-game__overlay--menu">
-          <p className="neon-game__eyebrow">Catalyx Arcade</p>
+          <p className="neon-game__eyebrow">Mayphex Arcade</p>
           <h1 className="neon-game__title">NEON VOID</h1>
           <p className="neon-game__subtitle">
             WASD to drift · Start with Pulse Bolt · Unlock blasters in the shop
