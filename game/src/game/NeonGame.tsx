@@ -140,6 +140,7 @@ export interface NeonGameProps {
 export const NeonGame: React.FC<NeonGameProps> = ({ store }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const overlayRef = useRef<HTMLCanvasElement>(null);
+  const musicRef = useRef<HTMLAudioElement>(null);
   const engineRef = useRef<NeonEngine | null>(null);
   const inputRef = useRef<InputState>({ ...defaultInput, keys: new Set() });
   const frameRef = useRef<number>(0);
@@ -163,6 +164,10 @@ export const NeonGame: React.FC<NeonGameProps> = ({ store }) => {
   const [slowFrameCount, setSlowFrameCount] = useState(0);
 
   useEffect(() => { debugOpenRef.current = debugOpen; }, [debugOpen]);
+
+  useEffect(() => {
+    if (musicRef.current) musicRef.current.volume = 0.45;
+  }, []);
 
   const {
     inputModeRef,
@@ -196,13 +201,25 @@ export const NeonGame: React.FC<NeonGameProps> = ({ store }) => {
     if (engineRef.current) applyHud({ ...engineRef.current.snapshot(), botMode: botModeRef.current });
   }, [applyHud]);
 
+  // Browsers block audio autoplay until a real user gesture — call this from
+  // click handlers (Launch, Sandbox, AI Mode) to start the looping theme.
+  const playMusic = useCallback(() => {
+    const audio = musicRef.current;
+    if (audio && audio.paused) void audio.play().catch(() => {});
+  }, []);
+
   const togglePause = useCallback(() => { engineRef.current?.togglePause(); syncHud(); }, [syncHud]);
-  const startGame = useCallback(() => { botModeRef.current = false; engineRef.current?.start(); syncHud(); }, [syncHud]);
+  const startGame = useCallback(() => {
+    playMusic();
+    botModeRef.current = false;
+    engineRef.current?.start();
+    syncHud();
+  }, [playMusic, syncHud]);
   const buyShopSupport = useCallback((id: ShopSupportId) => { if (engineRef.current?.buyShopSupport(id)) syncHud(); }, [syncHud]);
   const buyOrEquipBlaster = useCallback((id: BlasterId) => { if (engineRef.current?.buyOrEquipBlaster(id)) syncHud(); }, [syncHud]);
   const buyOrEquipSkin = useCallback((id: ShipSkinId) => { if (engineRef.current?.buyOrEquipSkin(id)) syncHud(); }, [syncHud]);
   const leaveShop = useCallback(() => { engineRef.current?.leaveShop(); syncHud(); }, [syncHud]);
-  const enterSandbox = useCallback(() => { engineRef.current?.enterSandbox(); syncHud(); }, [syncHud]);
+  const enterSandbox = useCallback(() => { playMusic(); engineRef.current?.enterSandbox(); syncHud(); }, [playMusic, syncHud]);
   const leaveSandbox = useCallback(() => { engineRef.current?.exitSandbox(); syncHud(); }, [syncHud]);
   const resetSandbox = useCallback(() => { engineRef.current?.resetSandbox(); syncHud(); }, [syncHud]);
   const exitToMenu = useCallback(() => { botModeRef.current = false; engineRef.current?.exitToMenu(); syncHud(); }, [syncHud]);
@@ -484,6 +501,10 @@ export const NeonGame: React.FC<NeonGameProps> = ({ store }) => {
 
   return (
     <div className="neon-game">
+      <audio ref={musicRef} loop preload="auto">
+        <source src="/audio/theme.ogg" type="audio/ogg" />
+        <source src="/audio/theme.mp3" type="audio/mpeg" />
+      </audio>
       <div className="neon-game__stage">
         <canvas
           ref={canvasRef}
