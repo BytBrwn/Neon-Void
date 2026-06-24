@@ -21,8 +21,15 @@ export class AmbientField {
   shootingStars: ShootingStar[] = [];
   backgroundPlanets: BackgroundPlanet[] = [];
   shootingStarTimer = 3.5;
+  private lastWidth = 0;
+  private lastHeight = 0;
 
   ensureInitialized(width: number, height: number): void {
+    const resized =
+      this.lastWidth > 0 && this.lastHeight > 0 && (width !== this.lastWidth || height !== this.lastHeight);
+    const scaleX = resized ? width / this.lastWidth : 1;
+    const scaleY = resized ? height / this.lastHeight : 1;
+
     if (this.stars.length === 0) {
       this.stars = Array.from({ length: STAR_FIELD_COUNT }, () => ({
         x: Math.random() * width,
@@ -30,13 +37,27 @@ export class AmbientField {
         depth: Math.random(),
         twinkle: Math.random() * TAU,
       }));
+    } else if (resized) {
+      for (const star of this.stars) {
+        star.x *= scaleX;
+        star.y *= scaleY;
+      }
     }
+
     if (this.backgroundPlanets.length === 0) {
       this.backgroundPlanets = createBackgroundField(width, height, BACKGROUND_PLANET_COUNT);
       for (const planet of this.backgroundPlanets) {
         void loadPlanetImage(planet.spec);
       }
+    } else if (resized) {
+      for (const planet of this.backgroundPlanets) {
+        planet.x *= scaleX;
+        planet.y *= scaleY;
+      }
     }
+
+    this.lastWidth = width;
+    this.lastHeight = height;
   }
 
   update(dt: number, motion: AmbientMotion): void {

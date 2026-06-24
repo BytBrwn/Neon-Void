@@ -495,7 +495,9 @@ export function loadPlanetImage(spec: PlanetSpec): Promise<HTMLImageElement> {
 }
 
 export function getPlanetImage(seed: number): HTMLImageElement | undefined {
-  return planetImages.get(seed);
+  const img = planetImages.get(seed);
+  if (img) touchPlanetCache(seed);
+  return img;
 }
 
 function pickSpawnPoint(
